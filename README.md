@@ -1,4 +1,4 @@
-# 🧠 Smart Learning — STT & TTS dengan Voice Cloning
+# 🧠 Smart Learning — STT & TTS dengan Voice Cloningg
 
 Sistem pembelajaran interaktif berbasis web yang mengintegrasikan **Speech-to-Text (STT)** dan **Text-to-Speech (TTS) dengan Voice Cloning**. Cocok untuk pembelajaran bahasa, terapi wicara, dan asistensi komunikasi.
 

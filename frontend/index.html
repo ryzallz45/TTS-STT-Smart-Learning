@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Smart Learning - STT & TTS Voice Cloning</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #f5f7fa; color: #1a1a2e; line-height: 1.6; padding: 20px;
+  }
+  .container { max-width: 800px; margin: 0 auto; }
+  header { text-align: center; padding: 30px 0 20px; }
+  header h1 { font-size: 1.6rem; color: #16213e; }
+  header p { color: #555; font-size: 0.9rem; margin-top: 4px; }
+  .card {
+    background: #fff; border-radius: 10px; padding: 24px; margin-bottom: 20px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  }
+  .card h2 { font-size: 1.15rem; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+  .card h2 .badge {
+    display: inline-block; font-size: 0.7rem; padding: 2px 8px; border-radius: 10px;
+    color: #fff; font-weight: 600;
+  }
+  .badge-voice { background: #6c5ce7; }
+  .badge-stt { background: #00b894; }
+  .badge-tts { background: #e17055; }
+  .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+  .row-center { justify-content: center; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 6px; padding: 10px 20px;
+    border: none; border-radius: 8px; font-size: 0.9rem; font-weight: 600;
+    cursor: pointer; transition: .2s; white-space: nowrap;
+  }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-primary { background: #6c5ce7; color: #fff; }
+  .btn-primary:hover:not(:disabled) { background: #5a4bd1; }
+  .btn-success { background: #00b894; color: #fff; }
+  .btn-success:hover:not(:disabled) { background: #00a381; }
+  .btn-danger { background: #d63031; color: #fff; }
+  .btn-danger:hover:not(:disabled) { background: #c0392b; }
+  .btn-warning { background: #e17055; color: #fff; }
+  .btn-warning:hover:not(:disabled) { background: #d35400; }
+  .btn-outline { background: transparent; border: 2px solid #6c5ce7; color: #6c5ce7; }
+  .btn-outline:hover:not(:disabled) { background: #6c5ce7; color: #fff; }
+  .btn-sm { padding: 6px 14px; font-size: 0.8rem; }
+  textarea {
+    width: 100%; min-height: 120px; padding: 12px; border: 2px solid #dfe6e9;
+    border-radius: 8px; font-size: 0.95rem; font-family: inherit;
+    resize: vertical; margin: 12px 0; transition: .2s;
+  }
+  textarea:focus { outline: none; border-color: #6c5ce7; }
+  audio { width: 100%; margin: 12px 0; }
+  .status { font-size: 0.85rem; color: #636e72; margin-top: 6px; }
+  .status.error { color: #d63031; }
+  .status.success { color: #00b894; }
+  .file-input-wrapper { position: relative; overflow: hidden; }
+  .file-input-wrapper input[type=file] {
+    position: absolute; left: 0; top: 0; opacity: 0; width: 100%; height: 100%; cursor: pointer;
+  }
+  .divider { height: 1px; background: #dfe6e9; margin: 16px 0; }
+  .sample-info {
+    background: #f8f9fa; border-radius: 8px; padding: 12px 16px; margin-top: 12px;
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  }
+  .sample-info audio { width: auto; min-width: 200px; margin: 0; flex: 1; }
+  .sample-label { font-weight: 600; font-size: 0.85rem; color: #6c5ce7; }
+  .spinner {
+    display: inline-block; width: 16px; height: 16px; border: 2px solid rgba(255,255,255,0.3);
+    border-top-color: #fff; border-radius: 50%; animation: spin .6s linear infinite;
+    vertical-align: middle;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .hidden { display: none !important; }
+  .mt-12 { margin-top: 12px; }
+  .text-center { text-align: center; }
+  .recording-indicator {
+    display: inline-block; width: 10px; height: 10px; background: #d63031;
+    border-radius: 50%; animation: pulse 1s ease-in-out infinite; margin-right: 6px;
+  }
+  @keyframes pulse { 50% { opacity: 0.3; } }
+  @media (max-width: 600px) {
+    body { padding: 12px; }
+    .card { padding: 16px; }
+    .btn { width: 100%; justify-content: center; }
+    .row { flex-direction: column; }
+    .sample-info { flex-direction: column; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1>Smart Learning</h1>
+    <p>Sistem Pembelajaran Interaktif — Speech-to-Text &amp; Text-to-Speech dengan Voice Cloning</p>
+  </header>
+
+  <div id="status-bar" class="status text-center" style="margin-bottom:12px"></div>
+
+  <!-- SECTION 1: VOICE SAMPLE -->
+  <div class="card">
+    <h2><span class="badge badge-voice">1</span> Voice Sample</h2>
+    <p style="font-size:0.88rem;color:#636e72;margin-bottom:12px">
+      Rekam atau unggah sampel suara Anda (min. 10 detik) untuk dijadikan referensi voice cloning.
+    </p>
+    <div class="row">
+      <button class="btn btn-primary" id="btn-record-sample">
+        <span id="record-sample-icon">🎤</span> <span id="record-sample-text">Record Sample</span>
+      </button>
+      <div class="file-input-wrapper">
+        <button class="btn btn-outline">📁 Upload Audio</button>
+        <input type="file" id="file-upload-sample" accept="audio/*">
+      </div>
+    </div>
+    <div id="sample-status" class="status mt-12"></div>
+    <div id="sample-info" class="sample-info hidden">
+      <span class="sample-label">✓ Sample Active</span>
+      <audio id="sample-audio" controls></audio>
+      <button class="btn btn-sm btn-danger" id="btn-remove-sample">Remove</button>
+    </div>
+  </div>
+
+  <!-- SECTION 2: SPEECH-TO-TEXT -->
+  <div class="card">
+    <h2><span class="badge badge-stt">2</span> Speech-to-Text</h2>
+    <p style="font-size:0.88rem;color:#636e72;margin-bottom:12px">
+      Rekam suara Anda untuk dikonversi menjadi teks menggunakan Faster-Whisper.
+    </p>
+    <div class="row">
+      <button class="btn btn-success" id="btn-record-stt">🎙️ Record</button>
+      <button class="btn btn-danger" id="btn-stop-stt" disabled>⏹ Stop</button>
+      <button class="btn btn-primary" id="btn-transcribe" disabled>
+        <span id="transcribe-text">Transcribe</span>
+      </button>
+    </div>
+    <textarea id="stt-result" placeholder="Hasil transkripsi akan muncul di sini..."></textarea>
+    <div id="stt-status" class="status"></div>
+  </div>
+
+  <!-- SECTION 3: TEXT-TO-SPEECH -->
+  <div class="card">
+    <h2><span class="badge badge-tts">3</span> Text-to-Speech (Voice Cloning)</h2>
+    <p style="font-size:0.88rem;color:#636e72;margin-bottom:12px">
+      Gunakan teks di atas untuk menghasilkan suara dengan karakteristik suara Anda via XTTS v2.
+    </p>
+    <div class="row">
+      <button class="btn btn-warning" id="btn-generate-tts" disabled>
+        <span id="generate-text">🔊 Generate Voice</span>
+      </button>
+      <button class="btn btn-primary btn-sm" id="btn-download-tts" disabled>⬇ Download</button>
+    </div>
+    <audio id="tts-player" controls class="hidden"></audio>
+    <div id="tts-status" class="status"></div>
+  </div>
+</div>
+
+<script>
+// ─── State ───────────────────────────────────────────────────────────
+const STATE = {
+  sampleFilename: localStorage.getItem('activeVoiceSample') || null,
+  sttAudioBlob: null,
+  ttsAudioUrl: null,
+  isRecordingSample: false,
+  isRecordingStt: false,
+  sttMediaRecorder: null,
+  sttChunks: [],
+};
+
+// ─── DOM refs ────────────────────────────────────────────────────────
+const $ = s => document.querySelector(s);
+const sampleStatus = $('#sample-status');
+const sampleInfo = $('#sample-info');
+const sampleAudio = $('#sample-audio');
+const btnRecordSample = $('#btn-record-sample');
+const recordSampleIcon = $('#record-sample-icon');
+const recordSampleText = $('#record-sample-text');
+const fileUploadSample = $('#file-upload-sample');
+const btnRemoveSample = $('#btn-remove-sample');
+const btnRecordStt = $('#btn-record-stt');
+const btnStopStt = $('#btn-stop-stt');
+const btnTranscribe = $('#btn-transcribe');
+const transcribeText = $('#transcribe-text');
+const sttResult = $('#stt-result');
+const sttStatus = $('#stt-status');
+const btnGenerateTts = $('#btn-generate-tts');
+const generateText = $('#generate-text');
+const btnDownloadTts = $('#btn-download-tts');
+const ttsPlayer = $('#tts-player');
+const ttsStatus = $('#tts-status');
+const statusBar = $('#status-bar');
+
+// ─── Helpers ─────────────────────────────────────────────────────────
+function setStatus(el, msg, type = '') {
+  el.textContent = msg;
+  el.className = 'status' + (type ? ' ' + type : '');
+}
+
+function showError(el, msg) { setStatus(el, '❌ ' + msg, 'error'); }
+function showSuccess(el, msg) { setStatus(el, '✅ ' + msg, 'success'); }
+
+function setLoading(btnEl, textEl, label, isLoading) {
+  btnEl.disabled = isLoading;
+  textEl.innerHTML = isLoading ? `<span class="spinner"></span> ${label}...` : label;
+}
+
+async function api(url, opts = {}) {
+  const res = await fetch(url, opts);
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+  return data;
+}
+
+function formatTime(seconds) {
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
+// ─── Voice Sample ────────────────────────────────────────────────────
+function updateSampleUI() {
+  if (STATE.sampleFilename) {
+    sampleInfo.classList.remove('hidden');
+    sampleAudio.src = `/storage/voice_samples/${STATE.sampleFilename}`;
+    sampleAudio.load();
+    setStatus(sampleStatus, `Active: ${STATE.sampleFilename}`, 'success');
+    btnGenerateTts.disabled = false;
+  } else {
+    sampleInfo.classList.add('hidden');
+    sampleAudio.src = '';
+    setStatus(sampleStatus, 'No voice sample. Please record or upload.', '');
+    btnGenerateTts.disabled = true;
+  }
+}
+
+async function uploadSample(blob, filename) {
+  setStatus(sampleStatus, 'Uploading voice sample...');
+  const form = new FormData();
+  form.append('file', blob, filename);
+  try {
+    const data = await api('/api/voice-sample/upload', { method: 'POST', body: form });
+    STATE.sampleFilename = data.filename;
+    localStorage.setItem('activeVoiceSample', data.filename);
+    updateSampleUI();
+    showSuccess(sampleStatus, 'Voice sample saved!');
+  } catch (e) {
+    showError(sampleStatus, e.message);
+  }
+}
+
+// Record sample
+let sampleMediaRecorder = null;
+let sampleChunks = [];
+
+btnRecordSample.addEventListener('click', async () => {
+  if (STATE.isRecordingSample) {
+    sampleMediaRecorder.stop();
+    return;
+  }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    sampleMediaRecorder = new MediaRecorder(stream, { mimeType: MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : 'audio/webm' });
+    sampleChunks = [];
+    sampleMediaRecorder.ondataavailable = e => { if (e.data.size > 0) sampleChunks.push(e.data); };
+    sampleMediaRecorder.onstop = () => {
+      stream.getTracks().forEach(t => t.stop());
+      const blob = new Blob(sampleChunks, { type: sampleMediaRecorder.mimeType });
+      uploadSample(blob, `voice_sample_${Date.now()}.webm`);
+      STATE.isRecordingSample = false;
+      recordSampleIcon.textContent = '🎤';
+      recordSampleText.textContent = 'Record Sample';
+      btnRecordSample.className = 'btn btn-primary';
+    };
+    sampleMediaRecorder.start();
+    STATE.isRecordingSample = true;
+    recordSampleIcon.innerHTML = '<span class="recording-indicator"></span>';
+    recordSampleText.textContent = 'Stop Recording';
+    btnRecordSample.className = 'btn btn-danger';
+    setStatus(sampleStatus, 'Recording... speak now');
+  } catch (e) {
+    showError(sampleStatus, 'Microphone access denied: ' + e.message);
+  }
+});
+
+// Upload file
+fileUploadSample.addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  uploadSample(file, file.name);
+  fileUploadSample.value = '';
+});
+
+// Remove sample
+btnRemoveSample.addEventListener('click', () => {
+  STATE.sampleFilename = null;
+  localStorage.removeItem('activeVoiceSample');
+  updateSampleUI();
+});
+
+// Restore sample on load
+updateSampleUI();
+
+// ─── Speech-to-Text ──────────────────────────────────────────────────
+async function startSttRecording() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    STATE.sttMediaRecorder = new MediaRecorder(stream, { mimeType: MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : 'audio/webm' });
+    STATE.sttChunks = [];
+    STATE.sttMediaRecorder.ondataavailable = e => { if (e.data.size > 0) STATE.sttChunks.push(e.data); };
+    STATE.sttMediaRecorder.onstop = () => {
+      stream.getTracks().forEach(t => t.stop());
+      STATE.sttAudioBlob = new Blob(STATE.sttChunks, { type: STATE.sttMediaRecorder.mimeType });
+      btnTranscribe.disabled = false;
+      setStatus(sttStatus, `Recorded ${formatTime(STATE.sttAudioBlob.size / 32000)}s. Click Transcribe.`, 'success');
+    };
+    STATE.sttMediaRecorder.start();
+    STATE.isRecordingStt = true;
+    btnRecordStt.disabled = true;
+    btnStopStt.disabled = false;
+    sttResult.placeholder = 'Recording...';
+    setStatus(sttStatus, 'Recording...', '');
+  } catch (e) {
+    showError(sttStatus, 'Microphone access denied: ' + e.message);
+  }
+}
+
+btnRecordStt.addEventListener('click', startSttRecording);
+
+btnStopStt.addEventListener('click', () => {
+  if (STATE.sttMediaRecorder && STATE.isRecordingStt) {
+    STATE.sttMediaRecorder.stop();
+    STATE.isRecordingStt = false;
+    btnRecordStt.disabled = false;
+    btnStopStt.disabled = true;
+  }
+});
+
+btnTranscribe.addEventListener('click', async () => {
+  if (!STATE.sttAudioBlob) return;
+  setLoading(btnTranscribe, transcribeText, 'Transcribing', true);
+  btnRecordStt.disabled = true;
+  btnStopStt.disabled = true;
+  setStatus(sttStatus, 'Transcribing audio with Faster-Whisper...');
+
+  try {
+    const form = new FormData();
+    form.append('file', STATE.sttAudioBlob, `recording_${Date.now()}.webm`);
+    form.append('language', 'id');
+    const data = await api('/api/stt/transcribe', { method: 'POST', body: form });
+    sttResult.value = data.text;
+    showSuccess(sttStatus, 'Transcription complete!');
+  } catch (e) {
+    showError(sttStatus, e.message);
+  } finally {
+    setLoading(btnTranscribe, transcribeText, 'Transcribe', false);
+    btnRecordStt.disabled = false;
+  }
+});
+
+// ─── Text-to-Speech ──────────────────────────────────────────────────
+btnGenerateTts.addEventListener('click', async () => {
+  const text = sttResult.value.trim();
+  if (!text) {
+    showError(ttsStatus, 'Teks masih kosong. Rekam atau ketik teks terlebih dahulu.');
+    return;
+  }
+  if (!STATE.sampleFilename) {
+    showError(ttsStatus, 'Voice sample belum tersedia. Rekam atau unggah sampel suara terlebih dahulu.');
+    return;
+  }
+  setLoading(btnGenerateTts, generateText, 'Generating', true);
+  ttsPlayer.classList.add('hidden');
+  btnDownloadTts.disabled = true;
+  setStatus(ttsStatus, 'Generating speech with XTTS v2 voice cloning...');
+
+  try {
+    const form = new FormData();
+    form.append('text', text);
+    form.append('voice_sample', STATE.sampleFilename);
+    form.append('language', 'id');
+    const data = await api('/api/tts/generate', { method: 'POST', body: form });
+
+    STATE.ttsAudioUrl = data.audio_url;
+    ttsPlayer.src = STATE.ttsAudioUrl;
+    ttsPlayer.classList.remove('hidden');
+    ttsPlayer.load();
+    ttsPlayer.play().catch(() => {});
+    btnDownloadTts.disabled = false;
+    showSuccess(ttsStatus, 'Speech generated with your voice!');
+  } catch (e) {
+    showError(ttsStatus, e.message);
+  } finally {
+    setLoading(btnGenerateTts, generateText, 'Generate Voice', false);
+  }
+});
+
+btnDownloadTts.addEventListener('click', () => {
+  if (STATE.ttsAudioUrl) {
+    const a = document.createElement('a');
+    a.href = STATE.ttsAudioUrl;
+    a.download = `tts_output_${Date.now()}.wav`;
+    a.click();
+  }
+});
+
+// ─── Keyboard shortcut: allow editing textarea ───────────────────────
+// The transcribed text is editable so users can fix errors before TTS
+
+// ─── Status bar ──────────────────────────────────────────────────────
+(async function checkStatus() {
+  try {
+    const d = await api('/api/status');
+    setStatus(statusBar, `Server ready | Device: ${d.device}${d.cuda_available ? ' (CUDA)' : ''}`, 'success');
+  } catch (e) {
+    setStatus(statusBar, '⚠️ Cannot connect to server. Make sure the backend is running.', 'error');
+  }
+})();
+</script>
+</body>
+</html>

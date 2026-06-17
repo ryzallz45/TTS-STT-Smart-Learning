@@ -37,7 +37,7 @@ Frontend (index.html)         Backend (FastAPI)           Model Layer
 git clone https://github.com/ryzallz45/TTS-STT-Smart-Learning.git
 cd TTS-STT-Smart-Learning
 python -m venv venv
-venv\Scripts\activate        # Windows
+venv\Scripts\activate        # Windows10
 # source venv/bin/activate   # Linux/Mac
 ```
 

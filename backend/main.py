@@ -1,18 +1,32 @@
 import os
+import sys
 import uuid
 import io
 import json
+import time
+import traceback
+import subprocess
 from pathlib import Path
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
+from imageio_ffmpeg import get_ffmpeg_exe
 
-from backend.stt_engine import transcribe
-from backend.tts_engine import generate_speech
+_FFMPEG = None
+def get_ffmpeg():
+    global _FFMPEG
+    if _FFMPEG is None:
+        _FFMPEG = get_ffmpeg_exe()
+    return _FFMPEG
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(BASE_DIR))
+
+from backend.stt_engine import transcribe, get_stt_model
+from backend.tts_engine import generate_speech, get_tts_model
 STORAGE_DIR = BASE_DIR / "storage"
 VOICE_SAMPLES_DIR = STORAGE_DIR / "voice_samples"
 GENERATED_DIR = STORAGE_DIR / "generated"
@@ -21,7 +35,39 @@ FRONTEND_DIR = BASE_DIR / "frontend"
 for d in [VOICE_SAMPLES_DIR, GENERATED_DIR]:
     d.mkdir(parents=True, exist_ok=True)
 
-app = FastAPI(title="Smart Learning - STT & TTS with Voice Cloning")
+_models_loaded = {"stt": False, "tts": False, "tts_error": None}
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    print("=" * 50)
+    print("Server starting — preloading models...")
+    print("=" * 50)
+    try:
+        print("[Startup] Loading STT model...")
+        t0 = time.time()
+        get_stt_model()
+        _models_loaded["stt"] = True
+        print(f"[Startup] STT model ready in {time.time() - t0:.2f}s")
+    except Exception as e:
+        print(f"[Startup] STT model failed: {e}")
+        _models_loaded["stt_error"] = str(e)
+    try:
+        print("[Startup] Loading TTS model...")
+        t0 = time.time()
+        get_tts_model()
+        _models_loaded["tts"] = True
+        print(f"[Startup] TTS model ready in {time.time() - t0:.2f}s")
+    except Exception as e:
+        print(f"[Startup] TTS model failed: {e}")
+        _models_loaded["tts_error"] = str(e)
+        traceback.print_exc()
+    print("=" * 50)
+    yield
+    print("[Shutdown] Server stopping.")
+
+
+app = FastAPI(title="Smart Learning - STT & TTS with Voice Cloning", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -43,6 +89,19 @@ async def serve_frontend():
     return index_path.read_text(encoding="utf-8")
 
 
+def _convert_to_wav(src_path: Path) -> Path:
+    if src_path.suffix.lower() == ".wav":
+        return src_path
+    wav_path = src_path.with_suffix(".wav")
+    ffmpeg = get_ffmpeg()
+    subprocess.run(
+        [ffmpeg, "-y", "-i", str(src_path), "-ac", "1", "-ar", "22050", "-sample_fmt", "s16", str(wav_path)],
+        capture_output=True, check=True,
+    )
+    src_path.unlink(missing_ok=True)
+    return wav_path
+
+
 @app.post("/api/voice-sample/upload")
 async def upload_voice_sample(file: UploadFile = File(...)):
     if not file.filename:
@@ -58,11 +117,13 @@ async def upload_voice_sample(file: UploadFile = File(...)):
     content = await file.read()
     save_path.write_bytes(content)
 
+    final_path = _convert_to_wav(save_path)
+
     return {
         "status": "ok",
         "file_id": file_id,
-        "filename": f"{file_id}{ext}",
-        "path": f"/storage/voice_samples/{file_id}{ext}",
+        "filename": final_path.name,
+        "path": f"/storage/voice_samples/{final_path.name}",
         "message": "Voice sample uploaded successfully",
     }
 
@@ -90,7 +151,8 @@ async def speech_to_text(file: UploadFile = File(...), language: str = Form("id"
     try:
         text = transcribe(str(audio_path), language=language)
     except Exception as e:
-        raise HTTPException(500, f"Transcription failed: {str(e)}")
+        traceback.print_exc()
+        raise HTTPException(500, f"Transkripsi gagal: {str(e)}")
     finally:
         if audio_path.exists():
             audio_path.unlink()
@@ -99,13 +161,23 @@ async def speech_to_text(file: UploadFile = File(...), language: str = Form("id"
 
 
 @app.post("/api/tts/generate")
-async def text_to_speech(text: str = Form(...), voice_sample: str = Form(...), language: str = Form("id")):
+async def text_to_speech(text: str = Form(...), voice_sample: str = Form(...), language: str = Form("en")):
     if not text or not text.strip():
         raise HTTPException(400, "Text cannot be empty")
 
     voice_path = VOICE_SAMPLES_DIR / voice_sample
     if not voice_path.exists():
         raise HTTPException(404, "Voice sample not found. Please upload/record a voice sample first.")
+
+    if voice_path.suffix.lower() != ".wav":
+        wav_path = voice_path.with_suffix(".wav")
+        if not wav_path.exists():
+            ffmpeg = get_ffmpeg()
+            subprocess.run(
+                [ffmpeg, "-y", "-i", str(voice_path), "-ac", "1", "-ar", "22050", "-sample_fmt", "s16", str(wav_path)],
+                capture_output=True, check=True,
+            )
+        voice_path = wav_path
 
     file_id = str(uuid.uuid4())
     output_filename = f"tts_{file_id}.wav"
@@ -116,7 +188,8 @@ async def text_to_speech(text: str = Form(...), voice_sample: str = Form(...), l
     except Exception as e:
         if output_path.exists():
             output_path.unlink()
-        raise HTTPException(500, f"TTS generation failed: {str(e)}")
+        traceback.print_exc()
+        raise HTTPException(500, f"Generate suara gagal: {str(e)}")
 
     return {
         "status": "ok",
@@ -147,6 +220,10 @@ async def status():
         "status": "ok",
         "cuda_available": torch.cuda.is_available(),
         "device": "cuda" if torch.cuda.is_available() else "cpu",
+        "models": {
+            "stt": "ready" if _models_loaded["stt"] else ("error" if _models_loaded.get("stt_error") else "loading"),
+            "tts": "ready" if _models_loaded["tts"] else ("error" if _models_loaded.get("tts_error") else "loading"),
+        },
     }
 
 

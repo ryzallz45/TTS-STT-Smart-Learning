@@ -4,3 +4,5 @@ __pycache__/
 storage/generated/
 storage/voice_samples/
 .env
+*.docx
+generate_report.py

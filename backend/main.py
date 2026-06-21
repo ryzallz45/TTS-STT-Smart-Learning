@@ -27,6 +27,7 @@ sys.path.insert(0, str(BASE_DIR))
 
 from backend.stt_engine import transcribe, get_stt_model
 from backend.tts_engine import generate_speech, get_tts_model
+from backend.quiz_engine import evaluate_pronunciation
 STORAGE_DIR = BASE_DIR / "storage"
 VOICE_SAMPLES_DIR = STORAGE_DIR / "voice_samples"
 GENERATED_DIR = STORAGE_DIR / "generated"
@@ -197,6 +198,41 @@ async def text_to_speech(text: str = Form(...), voice_sample: str = Form(...), l
         "filename": output_filename,
         "message": "Speech generated successfully",
     }
+
+
+@app.post("/api/quiz/evaluate")
+async def quiz_evaluate(file: UploadFile = File(...), target_text: str = Form(...), language: str = Form("id")):
+    if not file.filename:
+        raise HTTPException(400, "No audio file provided")
+    if not target_text or not target_text.strip():
+        raise HTTPException(400, "Target text cannot be empty")
+
+    ext = Path(file.filename).suffix.lower()
+    if not ext:
+        ext = ".wav"
+
+    file_id = str(uuid.uuid4())
+    audio_path = GENERATED_DIR / f"quiz_input_{file_id}{ext}"
+
+    content = await file.read()
+    audio_path.write_bytes(content)
+
+    try:
+        transcribed = transcribe(str(audio_path), language=language)
+        if not transcribed:
+            raise HTTPException(400, "Tidak dapat mendeteksi ucapan. Silakan coba lagi.")
+        result = evaluate_pronunciation(target_text, transcribed)
+        result["transcribed_text"] = transcribed
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(500, f"Evaluasi gagal: {str(e)}")
+    finally:
+        if audio_path.exists():
+            audio_path.unlink()
+
+    return {"status": "ok", "result": result}
 
 
 @app.get("/api/voice-samples")

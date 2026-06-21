@@ -80,6 +80,43 @@
     border-radius: 50%; animation: pulse 1s ease-in-out infinite; margin-right: 6px;
   }
   @keyframes pulse { 50% { opacity: 0.3; } }
+  .badge-quiz { background: #fdcb6e; color: #2d3436; }
+  .quiz-score-circle {
+    width: 120px; height: 120px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    flex-direction: column; margin: 0 auto 16px; font-weight: 700; border: 6px solid #dfe6e9;
+  }
+  .quiz-score-circle .score-value { font-size: 2.2rem; line-height: 1; }
+  .quiz-score-circle .score-label { font-size: 0.75rem; opacity: 0.8; }
+  .quiz-score-circle.excellent { border-color: #00b894; color: #00b894; }
+  .quiz-score-circle.good { border-color: #6c5ce7; color: #6c5ce7; }
+  .quiz-score-circle.fair { border-color: #fdcb6e; color: #fdcb6e; }
+  .quiz-score-circle.poor { border-color: #d63031; color: #d63031; }
+  .quiz-grade { text-align: center; font-size: 1.1rem; font-weight: 600; margin-bottom: 16px; }
+  .quiz-grade.excellent { color: #00b894; }
+  .quiz-grade.good { color: #6c5ce7; }
+  .quiz-grade.fair { color: #fdcb6e; }
+  .quiz-grade.poor { color: #d63031; }
+  .quiz-word-list { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin: 12px 0; }
+  .quiz-word {
+    display: inline-block; padding: 6px 14px; border-radius: 20px; font-weight: 600; font-size: 0.9rem;
+  }
+  .quiz-word.correct { background: #00b89420; color: #00b894; border: 1px solid #00b894; }
+  .quiz-word.wrong { background: #d6303120; color: #d63031; border: 1px solid #d63031; text-decoration: line-through; }
+  .quiz-word.missing { background: #dfe6e9; color: #636e72; border: 1px dashed #b2bec3; }
+  .quiz-stats {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 16px 0;
+  }
+  .quiz-stat {
+    background: #f8f9fa; border-radius: 8px; padding: 12px; text-align: center;
+  }
+  .quiz-stat .stat-value { font-size: 1.3rem; font-weight: 700; color: #2d3436; }
+  .quiz-stat .stat-label { font-size: 0.75rem; color: #636e72; margin-top: 2px; }
+  .quiz-extra-words { text-align: center; margin-top: 8px; font-size: 0.85rem; color: #e17055; }
+  .select-input {
+    padding: 8px 12px; border: 2px solid #dfe6e9; border-radius: 8px; font-size: 0.9rem;
+    background: #fff; font-family: inherit; cursor: pointer;
+  }
+  .select-input:focus { outline: none; border-color: #6c5ce7; }
   @media (max-width: 600px) {
     body { padding: 12px; }
     .card { padding: 16px; }
@@ -152,6 +189,66 @@
     </div>
     <audio id="tts-player" controls class="hidden"></audio>
     <div id="tts-status" class="status"></div>
+  </div>
+
+  <!-- SECTION 4: PRONUNCIATION QUIZ -->
+  <div class="card">
+    <h2><span class="badge badge-quiz">4</span> Kuis Pengucapan</h2>
+    <p style="font-size:0.88rem;color:#636e72;margin-bottom:12px">
+      Latih pengucapan Anda! Ketik teks target, lalu rekam suara Anda untuk dievaluasi.
+    </p>
+    <div class="row" style="gap:8px;margin-bottom:12px">
+      <button class="btn btn-sm btn-outline" id="btn-quiz-fill-stt">📋 Ambil dari STT</button>
+    </div>
+    <textarea id="quiz-target-text" placeholder="Tulis teks yang ingin Anda latih pengucapannya..."></textarea>
+    <div class="row" style="gap:8px;margin-bottom:12px">
+      <select id="quiz-language" class="select-input">
+        <option value="id">🇮🇩 Indonesia</option>
+        <option value="en">🇬🇧 English</option>
+        <option value="ar">🇸🇦 العربية</option>
+        <option value="zh-cn">🇨🇳 中文</option>
+        <option value="es">🇪🇸 Español</option>
+        <option value="fr">🇫🇷 Français</option>
+        <option value="de">🇩🇪 Deutsch</option>
+        <option value="ja">🇯🇵 日本語</option>
+        <option value="ko">🇰🇷 한국어</option>
+      </select>
+      <button class="btn btn-success" id="btn-quiz-record">🎙️ Record</button>
+      <button class="btn btn-danger" id="btn-quiz-stop" disabled>⏹ Stop</button>
+      <button class="btn btn-primary" id="btn-quiz-evaluate" disabled>
+        <span id="evaluate-text">✅ Evaluate</span>
+      </button>
+    </div>
+    <div id="quiz-status" class="status"></div>
+
+    <div id="quiz-result" class="hidden">
+      <div class="divider"></div>
+      <div id="quiz-score-circle" class="quiz-score-circle">
+        <span class="score-value" id="quiz-score-value">0</span>
+        <span class="score-label">Skor</span>
+      </div>
+      <div id="quiz-grade" class="quiz-grade"></div>
+      <div id="quiz-word-feedback" class="quiz-word-list"></div>
+      <div id="quiz-extra-words" class="quiz-extra-words hidden"></div>
+      <div class="quiz-stats">
+        <div class="quiz-stat">
+          <div class="stat-value" id="quiz-stat-word">0%</div>
+          <div class="stat-label">Akurasi Kata</div>
+        </div>
+        <div class="quiz-stat">
+          <div class="stat-value" id="quiz-stat-char">0%</div>
+          <div class="stat-label">Akurasi Karakter</div>
+        </div>
+        <div class="quiz-stat">
+          <div class="stat-value" id="quiz-stat-wer">0%</div>
+          <div class="stat-label">Error Rate</div>
+        </div>
+      </div>
+      <div id="quiz-transcribed" style="font-size:0.85rem;color:#636e72;text-align:center;margin-top:8px"></div>
+      <div class="text-center mt-12">
+        <button class="btn btn-sm btn-outline" id="btn-quiz-retry">🔄 Coba Lagi</button>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -401,6 +498,149 @@ btnDownloadTts.addEventListener('click', () => {
     a.download = `tts_output_${Date.now()}.wav`;
     a.click();
   }
+});
+
+// ─── Pronunciation Quiz ─────────────────────────────────────────────
+const QUIZ = {
+  audioBlob: null,
+  mediaRecorder: null,
+  chunks: [],
+  isRecording: false,
+};
+
+const quizTargetText = $('#quiz-target-text');
+const quizLanguage = $('#quiz-language');
+const btnQuizRecord = $('#btn-quiz-record');
+const btnQuizStop = $('#btn-quiz-stop');
+const btnQuizEvaluate = $('#btn-quiz-evaluate');
+const evaluateText = $('#evaluate-text');
+const btnQuizFillStt = $('#btn-quiz-fill-stt');
+const btnQuizRetry = $('#btn-quiz-retry');
+const quizStatus = $('#quiz-status');
+const quizResult = $('#quiz-result');
+const quizScoreCircle = $('#quiz-score-circle');
+const quizScoreValue = $('#quiz-score-value');
+const quizGrade = $('#quiz-grade');
+const quizWordFeedback = $('#quiz-word-feedback');
+const quizExtraWords = $('#quiz-extra-words');
+const quizStatWord = $('#quiz-stat-word');
+const quizStatChar = $('#quiz-stat-char');
+const quizStatWer = $('#quiz-stat-wer');
+const quizTranscribed = $('#quiz-transcribed');
+
+btnQuizFillStt.addEventListener('click', () => {
+  const sttText = sttResult.value.trim();
+  if (sttText) {
+    quizTargetText.value = sttText;
+    showSuccess(quizStatus, 'Teks dari STT telah diisi!');
+  } else {
+    showError(quizStatus, 'Teks STT masih kosong. Transkripsikan suara terlebih dahulu.');
+  }
+});
+
+btnQuizRecord.addEventListener('click', async () => {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    QUIZ.mediaRecorder = new MediaRecorder(stream, {
+      mimeType: MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : 'audio/webm'
+    });
+    QUIZ.chunks = [];
+    QUIZ.mediaRecorder.ondataavailable = e => { if (e.data.size > 0) QUIZ.chunks.push(e.data); };
+    QUIZ.mediaRecorder.onstop = () => {
+      stream.getTracks().forEach(t => t.stop());
+      QUIZ.audioBlob = new Blob(QUIZ.chunks, { type: QUIZ.mediaRecorder.mimeType });
+      btnQuizEvaluate.disabled = false;
+      setStatus(quizStatus, `Terekam ${formatTime(QUIZ.audioBlob.size / 32000)}s. Klik Evaluate.`, 'success');
+    };
+    QUIZ.mediaRecorder.start();
+    QUIZ.isRecording = true;
+    btnQuizRecord.disabled = true;
+    btnQuizStop.disabled = false;
+    btnQuizEvaluate.disabled = true;
+    quizResult.classList.add('hidden');
+    setStatus(quizStatus, 'Merekam... ucapkan teks target', '');
+  } catch (e) {
+    showError(quizStatus, 'Akses mikrofon ditolak: ' + e.message);
+  }
+});
+
+btnQuizStop.addEventListener('click', () => {
+  if (QUIZ.mediaRecorder && QUIZ.isRecording) {
+    QUIZ.mediaRecorder.stop();
+    QUIZ.isRecording = false;
+    btnQuizRecord.disabled = false;
+    btnQuizStop.disabled = true;
+  }
+});
+
+btnQuizEvaluate.addEventListener('click', async () => {
+  const text = quizTargetText.value.trim();
+  if (!text) {
+    showError(quizStatus, 'Teks target masih kosong. Ketik teks yang ingin diucapkan.');
+    return;
+  }
+  if (!QUIZ.audioBlob) {
+    showError(quizStatus, 'Belum ada rekaman. Rekam suara Anda terlebih dahulu.');
+    return;
+  }
+
+  setLoading(btnQuizEvaluate, evaluateText, 'Evaluating', true);
+  btnQuizRecord.disabled = true;
+  btnQuizStop.disabled = true;
+  setStatus(quizStatus, 'Mengevaluasi pengucapan...');
+
+  try {
+    const form = new FormData();
+    form.append('file', QUIZ.audioBlob, `quiz_${Date.now()}.webm`);
+    form.append('target_text', text);
+    form.append('language', quizLanguage.value);
+    const data = await api('/api/quiz/evaluate', { method: 'POST', body: form });
+    displayQuizResult(data.result);
+    showSuccess(quizStatus, 'Evaluasi selesai!');
+  } catch (e) {
+    showError(quizStatus, e.message);
+  } finally {
+    setLoading(btnQuizEvaluate, evaluateText, 'Evaluate', false);
+    btnQuizRecord.disabled = false;
+  }
+});
+
+function displayQuizResult(result) {
+  quizResult.classList.remove('hidden');
+
+  const score = result.score;
+  const gradeClass = result.grade_class;
+
+  quizScoreCircle.className = 'quiz-score-circle ' + gradeClass;
+  quizScoreValue.textContent = score;
+
+  quizGrade.className = 'quiz-grade ' + gradeClass;
+  quizGrade.textContent = result.grade + ' (' + score + '%)';
+
+  let wordsHtml = '';
+  for (const w of result.word_feedback) {
+    wordsHtml += `<span class="quiz-word ${w.status}">${w.status === 'missing' ? '○' : ''} ${w.word}</span>`;
+  }
+  quizWordFeedback.innerHTML = wordsHtml;
+
+  if (result.extra_words && result.extra_words.length > 0) {
+    quizExtraWords.classList.remove('hidden');
+    quizExtraWords.textContent = '🗣️ Kata tambahan: "' + result.extra_words.join(', ') + '"';
+  } else {
+    quizExtraWords.classList.add('hidden');
+  }
+
+  quizStatWord.textContent = result.word_accuracy + '%';
+  quizStatChar.textContent = result.char_accuracy + '%';
+  quizStatWer.textContent = result.wer + '%';
+  quizTranscribed.textContent = 'Terdeteksi: "' + result.transcribed_text + '"';
+}
+
+btnQuizRetry.addEventListener('click', () => {
+  QUIZ.audioBlob = null;
+  btnQuizEvaluate.disabled = true;
+  quizResult.classList.add('hidden');
+  setStatus(quizStatus, 'Silakan rekam ulang pengucapan Anda', '');
 });
 
 // ─── Keyboard shortcut: allow editing textarea ───────────────────────

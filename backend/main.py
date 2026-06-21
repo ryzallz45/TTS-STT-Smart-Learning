@@ -28,6 +28,7 @@ sys.path.insert(0, str(BASE_DIR))
 from backend.stt_engine import transcribe, get_stt_model
 from backend.tts_engine import generate_speech, get_tts_model
 from backend.quiz_engine import evaluate_pronunciation
+from backend.flashcard_engine import init_db as init_flashcard_db, create_set, list_sets, delete_set, create_card, list_cards, get_card, delete_card, update_card_audio
 STORAGE_DIR = BASE_DIR / "storage"
 VOICE_SAMPLES_DIR = STORAGE_DIR / "voice_samples"
 GENERATED_DIR = STORAGE_DIR / "generated"
@@ -63,6 +64,7 @@ async def lifespan(app: FastAPI):
         print(f"[Startup] TTS model failed: {e}")
         _models_loaded["tts_error"] = str(e)
         traceback.print_exc()
+    init_flashcard_db(STORAGE_DIR)
     print("=" * 50)
     yield
     print("[Shutdown] Server stopping.")
@@ -247,6 +249,91 @@ async def list_voice_samples():
                 "created": f.stat().st_mtime,
             })
     return {"status": "ok", "samples": files}
+
+
+# ─── Flashcard Routes ──────────────────────────────────────────────
+
+
+@app.post("/api/flashcard/sets")
+async def api_create_set(name: str = Form(...)):
+    if not name.strip():
+        raise HTTPException(400, "Nama set tidak boleh kosong")
+    new_set = create_set(name.strip())
+    return {"status": "ok", "set": new_set}
+
+
+@app.get("/api/flashcard/sets")
+async def api_list_sets():
+    return {"status": "ok", "sets": list_sets()}
+
+
+@app.delete("/api/flashcard/sets/{set_id}")
+async def api_delete_set(set_id: str):
+    if not delete_set(set_id):
+        raise HTTPException(404, "Set tidak ditemukan")
+    return {"status": "ok", "message": "Set berhasil dihapus"}
+
+
+@app.post("/api/flashcard/cards")
+async def api_create_card(set_id: str = Form(...), term: str = Form(...), definition: str = Form(...), language: str = Form("en")):
+    if not term.strip() or not definition.strip():
+        raise HTTPException(400, "Term dan definition tidak boleh kosong")
+    card = create_card(set_id, term.strip(), definition.strip(), language)
+    return {"status": "ok", "card": card}
+
+
+@app.get("/api/flashcard/cards")
+async def api_list_cards(set_id: str = None):
+    return {"status": "ok", "cards": list_cards(set_id)}
+
+
+@app.delete("/api/flashcard/cards/{card_id}")
+async def api_delete_card(card_id: str):
+    if not delete_card(card_id):
+        raise HTTPException(404, "Kartu tidak ditemukan")
+    return {"status": "ok", "message": "Kartu berhasil dihapus"}
+
+
+@app.post("/api/flashcard/cards/{card_id}/generate-audio")
+async def api_generate_card_audio(card_id: str, voice_sample: str = Form(...), language: str = Form("en")):
+    card = get_card(card_id)
+    if not card:
+        raise HTTPException(404, "Kartu tidak ditemukan")
+    if not card["term"].strip():
+        raise HTTPException(400, "Term kartu kosong")
+
+    voice_path = VOICE_SAMPLES_DIR / voice_sample
+    if not voice_path.exists():
+        raise HTTPException(404, "Voice sample tidak ditemukan")
+
+    if voice_path.suffix.lower() != ".wav":
+        wav_path = voice_path.with_suffix(".wav")
+        if not wav_path.exists():
+            ffmpeg = get_ffmpeg()
+            subprocess.run(
+                [ffmpeg, "-y", "-i", str(voice_path), "-ac", "1", "-ar", "22050", "-sample_fmt", "s16", str(wav_path)],
+                capture_output=True, check=True,
+            )
+        voice_path = wav_path
+
+    file_id = str(uuid.uuid4())
+    output_filename = f"flashcard_{file_id}.wav"
+    output_path = GENERATED_DIR / output_filename
+
+    try:
+        generate_speech(card["term"], str(voice_path), str(output_path), language=language)
+        update_card_audio(card_id, output_filename)
+    except Exception as e:
+        if output_path.exists():
+            output_path.unlink()
+        traceback.print_exc()
+        raise HTTPException(500, f"Generate audio gagal: {str(e)}")
+
+    return {
+        "status": "ok",
+        "audio_url": f"/storage/generated/{output_filename}",
+        "filename": output_filename,
+    }
 
 
 @app.get("/api/status")

@@ -250,6 +250,76 @@
       </div>
     </div>
   </div>
+
+  <!-- SECTION 5: FLASHCARD AUDIO -->
+  <div class="card">
+    <h2><span class="badge badge-tts" style="background:#00cec9">5</span> Flashcard Audio</h2>
+    <p style="font-size:0.88rem;color:#636e72;margin-bottom:12px">
+      Buat kartu belajar dengan audio dari suara Anda. Cocok untuk menghafal kosakata.
+    </p>
+
+    <div class="row" style="gap:8px;margin-bottom:12px">
+      <select id="fc-set-select" class="select-input" style="flex:1;min-width:150px">
+        <option value="">-- Pilih Set --</option>
+      </select>
+      <button class="btn btn-sm btn-primary" id="btn-fc-new-set">+ Set Baru</button>
+      <button class="btn btn-sm btn-danger" id="btn-fc-del-set" disabled>Hapus Set</button>
+      <button class="btn btn-sm btn-success" id="btn-fc-review" disabled>📖 Review</button>
+    </div>
+
+    <div id="fc-cards-area" class="hidden">
+      <div class="divider"></div>
+      <div class="row" style="gap:8px;margin-bottom:12px">
+        <button class="btn btn-sm btn-primary" id="btn-fc-add-card">+ Tambah Kartu</button>
+      </div>
+
+      <div id="fc-add-form" class="hidden" style="background:#f8f9fa;border-radius:8px;padding:16px;margin-bottom:16px">
+        <input type="text" id="fc-term-input" placeholder="Term (mis: Hello)" style="width:100%;padding:10px 12px;border:2px solid #dfe6e9;border-radius:8px;font-size:0.9rem;margin-bottom:8px">
+        <input type="text" id="fc-def-input" placeholder="Definisi (mis: Halo)" style="width:100%;padding:10px 12px;border:2px solid #dfe6e9;border-radius:8px;font-size:0.9rem;margin-bottom:8px">
+        <div class="row" style="gap:8px">
+          <select id="fc-card-lang" class="select-input">
+            <option value="en">🇬🇧 English</option>
+            <option value="id">🇮🇩 Indonesia</option>
+            <option value="ar">🇸🇦 العربية</option>
+            <option value="es">🇪🇸 Español</option>
+            <option value="fr">🇫🇷 Français</option>
+            <option value="de">🇩🇪 Deutsch</option>
+            <option value="ja">🇯🇵 日本語</option>
+            <option value="ko">🇰🇷 한국어</option>
+          </select>
+          <button class="btn btn-sm btn-success" id="btn-fc-save-card">Simpan</button>
+          <button class="btn btn-sm btn-outline" id="btn-fc-cancel-card">Batal</button>
+        </div>
+      </div>
+
+      <div id="fc-card-list"></div>
+      <div id="fc-empty" class="status text-center" style="padding:20px 0">Belum ada kartu. Tambah kartu baru!</div>
+    </div>
+
+    <div id="fc-status" class="status"></div>
+  </div>
+
+  <!-- REVIEW MODAL -->
+  <div id="fc-review-modal" class="hidden" style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px">
+    <div style="background:#fff;border-radius:16px;padding:32px;max-width:500px;width:100%;text-align:center;position:relative">
+      <button id="btn-fc-close-review" style="position:absolute;top:12px;right:16px;background:none;border:none;font-size:1.5rem;cursor:pointer;color:#636e72">&times;</button>
+      <div style="font-size:0.85rem;color:#636e72;margin-bottom:12px">
+        <span id="fc-review-counter">1/5</span>
+        <span style="margin:0 8px">|</span>
+        <span id="fc-review-set-name">Set</span>
+      </div>
+      <div id="fc-review-card" style="cursor:pointer;min-height:200px;display:flex;align-items:center;justify-content:center;padding:24px;border-radius:12px;background:#f8f9fa;margin-bottom:16px;font-size:1.4rem;font-weight:600;transition:.3s">
+        <span id="fc-review-term">Hello</span>
+      </div>
+      <div id="fc-review-def" class="hidden" style="font-size:1.1rem;color:#636e72;margin-bottom:16px"></div>
+      <audio id="fc-review-audio" controls style="width:100%;margin-bottom:16px" class="hidden"></audio>
+      <div class="row row-center" style="gap:12px">
+        <button class="btn btn-sm btn-outline" id="btn-fc-prev">◀ Sebelumnya</button>
+        <button class="btn btn-sm btn-primary" id="btn-fc-flip">👁 Balik</button>
+        <button class="btn btn-sm btn-outline" id="btn-fc-next">Selanjutnya ▶</button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -642,6 +712,320 @@ btnQuizRetry.addEventListener('click', () => {
   quizResult.classList.add('hidden');
   setStatus(quizStatus, 'Silakan rekam ulang pengucapan Anda', '');
 });
+
+// ─── Flashcard Audio ──────────────────────────────────────────────
+const FC = {
+  sets: [],
+  currentSetId: null,
+  cards: [],
+  reviewIndex: 0,
+  reviewFlipped: false,
+};
+
+const fcSetSelect = $('#fc-set-select');
+const btnFcNewSet = $('#btn-fc-new-set');
+const btnFcDelSet = $('#btn-fc-del-set');
+const btnFcReview = $('#btn-fc-review');
+const fcCardsArea = $('#fc-cards-area');
+const btnFcAddCard = $('#btn-fc-add-card');
+const fcAddForm = $('#fc-add-form');
+const fcTermInput = $('#fc-term-input');
+const fcDefInput = $('#fc-def-input');
+const fcCardLang = $('#fc-card-lang');
+const btnFcSaveCard = $('#btn-fc-save-card');
+const btnFcCancelCard = $('#btn-fc-cancel-card');
+const fcCardList = $('#fc-card-list');
+const fcEmpty = $('#fc-empty');
+const fcStatus = $('#fc-status');
+const fcReviewModal = $('#fc-review-modal');
+const btnFcCloseReview = $('#btn-fc-close-review');
+const fcReviewCounter = $('#fc-review-counter');
+const fcReviewSetName = $('#fc-review-set-name');
+const fcReviewCard = $('#fc-review-card');
+const fcReviewTerm = $('#fc-review-term');
+const fcReviewDef = $('#fc-review-def');
+const fcReviewAudio = $('#fc-review-audio');
+const btnFcPrev = $('#btn-fc-prev');
+const btnFcFlip = $('#btn-fc-flip');
+const btnFcNext = $('#btn-fc-next');
+
+async function fcLoadSets() {
+  try {
+    const d = await api('/api/flashcard/sets');
+    FC.sets = d.sets;
+    fcSetSelect.innerHTML = '<option value="">-- Pilih Set --</option>';
+    for (const s of d.sets) {
+      const opt = document.createElement('option');
+      opt.value = s.id;
+      opt.textContent = s.name;
+      fcSetSelect.appendChild(opt);
+    }
+    const hasSets = d.sets.length > 0;
+    btnFcDelSet.disabled = !hasSets;
+    btnFcReview.disabled = !hasSets;
+    if (!hasSets) {
+      fcCardsArea.classList.add('hidden');
+    }
+    if (FC.currentSetId) {
+      const stillExists = d.sets.some(s => s.id === FC.currentSetId);
+      if (!stillExists) {
+        FC.currentSetId = null;
+        fcSetSelect.value = '';
+        fcCardsArea.classList.add('hidden');
+      } else {
+        fcSetSelect.value = FC.currentSetId;
+      }
+    }
+  } catch (e) {
+    showError(fcStatus, 'Gagal memuat set: ' + e.message);
+  }
+}
+
+async function fcLoadCards() {
+  if (!FC.currentSetId) return;
+  try {
+    const d = await api('/api/flashcard/cards?set_id=' + FC.currentSetId);
+    FC.cards = d.cards;
+    fcRenderCards();
+  } catch (e) {
+    showError(fcStatus, 'Gagal memuat kartu: ' + e.message);
+  }
+}
+
+function fcRenderCards() {
+  fcCardList.innerHTML = '';
+  if (FC.cards.length === 0) {
+    fcEmpty.classList.remove('hidden');
+    return;
+  }
+  fcEmpty.classList.add('hidden');
+  for (const c of FC.cards) {
+    const div = document.createElement('div');
+    div.className = 'sample-info';
+    div.style.cssText = 'margin-bottom:8px;flex-wrap:wrap';
+    div.innerHTML = `
+      <div style="flex:1;min-width:120px">
+        <strong>${escapeHtml(c.term)}</strong>
+        <span style="color:#636e72;font-size:0.85rem"> — ${escapeHtml(c.definition)}</span>
+        <span style="font-size:0.7rem;color:#b2bec3;margin-left:6px">[${c.language}]</span>
+      </div>
+      <div class="row" style="gap:6px;flex-wrap:nowrap">
+        ${c.audio_filename ? `<audio controls style="height:36px;width:140px" src="/storage/generated/${c.audio_filename}"></audio>` : ''}
+        <button class="btn btn-sm btn-warning btn-fc-gen-audio" data-id="${c.id}" data-term="${escapeAttr(c.term)}" data-lang="${c.language}">🔊</button>
+        <button class="btn btn-sm btn-danger btn-fc-del-card" data-id="${c.id}">✕</button>
+      </div>
+    `;
+    fcCardList.appendChild(div);
+  }
+
+  fcCardList.querySelectorAll('.btn-fc-gen-audio').forEach(btn => {
+    btn.addEventListener('click', () => fcGenerateAudio(btn.dataset.id, btn.dataset.term, btn.dataset.lang));
+  });
+  fcCardList.querySelectorAll('.btn-fc-del-card').forEach(btn => {
+    btn.addEventListener('click', () => fcDeleteCard(btn.dataset.id));
+  });
+}
+
+function escapeHtml(str) {
+  const d = document.createElement('div');
+  d.textContent = str;
+  return d.innerHTML;
+}
+
+function escapeAttr(str) {
+  return str.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+fcSetSelect.addEventListener('change', () => {
+  FC.currentSetId = fcSetSelect.value || null;
+  if (FC.currentSetId) {
+    fcCardsArea.classList.remove('hidden');
+    fcLoadCards();
+  } else {
+    fcCardsArea.classList.add('hidden');
+  }
+});
+
+btnFcNewSet.addEventListener('click', async () => {
+  const name = prompt('Nama set baru:');
+  if (!name || !name.trim()) return;
+  try {
+    await api('/api/flashcard/sets', { method: 'POST', body: new URLSearchParams({ name: name.trim() }) });
+    showSuccess(fcStatus, 'Set "' + name.trim() + '" berhasil dibuat!');
+    await fcLoadSets();
+    for (const s of FC.sets) {
+      if (s.name === name.trim()) {
+        FC.currentSetId = s.id;
+        fcSetSelect.value = s.id;
+        fcCardsArea.classList.remove('hidden');
+        fcLoadCards();
+        break;
+      }
+    }
+  } catch (e) {
+    showError(fcStatus, 'Gagal membuat set: ' + e.message);
+  }
+});
+
+btnFcDelSet.addEventListener('click', async () => {
+  if (!FC.currentSetId) return;
+  const set = FC.sets.find(s => s.id === FC.currentSetId);
+  if (!set) return;
+  if (!confirm('Hapus set "' + set.name + '" dan semua kartu di dalamnya?')) return;
+  try {
+    await api('/api/flashcard/sets/' + FC.currentSetId, { method: 'DELETE' });
+    showSuccess(fcStatus, 'Set berhasil dihapus!');
+    FC.currentSetId = null;
+    await fcLoadSets();
+    fcCardsArea.classList.add('hidden');
+  } catch (e) {
+    showError(fcStatus, 'Gagal menghapus set: ' + e.message);
+  }
+});
+
+btnFcAddCard.addEventListener('click', () => {
+  fcAddForm.classList.remove('hidden');
+  fcTermInput.focus();
+});
+
+btnFcCancelCard.addEventListener('click', () => {
+  fcAddForm.classList.add('hidden');
+  fcTermInput.value = '';
+  fcDefInput.value = '';
+});
+
+btnFcSaveCard.addEventListener('click', async () => {
+  const term = fcTermInput.value.trim();
+  const def = fcDefInput.value.trim();
+  if (!term || !def) {
+    showError(fcStatus, 'Term dan definisi harus diisi');
+    return;
+  }
+  if (!FC.currentSetId) {
+    showError(fcStatus, 'Pilih set terlebih dahulu');
+    return;
+  }
+  try {
+    const form = new URLSearchParams();
+    form.append('set_id', FC.currentSetId);
+    form.append('term', term);
+    form.append('definition', def);
+    form.append('language', fcCardLang.value);
+    await api('/api/flashcard/cards', { method: 'POST', body: form });
+    showSuccess(fcStatus, 'Kartu berhasil ditambahkan!');
+    fcTermInput.value = '';
+    fcDefInput.value = '';
+    fcAddForm.classList.add('hidden');
+    fcLoadCards();
+  } catch (e) {
+    showError(fcStatus, 'Gagal menambah kartu: ' + e.message);
+  }
+});
+
+async function fcDeleteCard(cardId) {
+  if (!confirm('Hapus kartu ini?')) return;
+  try {
+    await api('/api/flashcard/cards/' + cardId, { method: 'DELETE' });
+    showSuccess(fcStatus, 'Kartu berhasil dihapus!');
+    fcLoadCards();
+  } catch (e) {
+    showError(fcStatus, 'Gagal menghapus kartu: ' + e.message);
+  }
+}
+
+async function fcGenerateAudio(cardId, term, lang) {
+  if (!STATE.sampleFilename) {
+    showError(fcStatus, 'Voice sample belum tersedia. Rekam atau unggah sampel suara terlebih dahulu.');
+    return;
+  }
+  try {
+    const form = new URLSearchParams();
+    form.append('voice_sample', STATE.sampleFilename);
+    form.append('language', lang);
+    await api('/api/flashcard/cards/' + cardId + '/generate-audio', { method: 'POST', body: form });
+    showSuccess(fcStatus, 'Audio berhasil digenerate!');
+    fcLoadCards();
+  } catch (e) {
+    showError(fcStatus, 'Gagal generate audio: ' + e.message);
+  }
+}
+
+// ─── Review Mode ───────────────────────────────────────────────────
+btnFcReview.addEventListener('click', () => {
+  if (FC.cards.length === 0) {
+    showError(fcStatus, 'Set ini belum memiliki kartu');
+    return;
+  }
+  FC.reviewIndex = 0;
+  FC.reviewFlipped = false;
+  fcReviewModal.classList.remove('hidden');
+  fcShowReviewCard();
+});
+
+btnFcCloseReview.addEventListener('click', () => {
+  fcReviewModal.classList.add('hidden');
+  fcReviewAudio.pause();
+});
+
+fcReviewModal.addEventListener('click', (e) => {
+  if (e.target === fcReviewModal) {
+    btnFcCloseReview.click();
+  }
+});
+
+function fcShowReviewCard() {
+  const card = FC.cards[FC.reviewIndex];
+  if (!card) return;
+  FC.reviewFlipped = false;
+  const set = FC.sets.find(s => s.id === FC.currentSetId);
+  fcReviewSetName.textContent = set ? set.name : '';
+  fcReviewCounter.textContent = (FC.reviewIndex + 1) + '/' + FC.cards.length;
+  fcReviewTerm.textContent = card.term;
+  fcReviewDef.classList.add('hidden');
+  fcReviewCard.style.background = '#f8f9fa';
+  fcReviewCard.style.fontSize = '1.4rem';
+  if (card.audio_filename) {
+    fcReviewAudio.src = '/storage/generated/' + card.audio_filename;
+    fcReviewAudio.classList.remove('hidden');
+    fcReviewAudio.play().catch(() => {});
+  } else {
+    fcReviewAudio.classList.add('hidden');
+    fcReviewAudio.src = '';
+  }
+}
+
+btnFcFlip.addEventListener('click', () => {
+  if (FC.reviewFlipped) {
+    fcReviewTerm.textContent = FC.cards[FC.reviewIndex].term;
+    fcReviewDef.classList.add('hidden');
+    fcReviewCard.style.background = '#f8f9fa';
+    fcReviewCard.style.fontSize = '1.4rem';
+  } else {
+    fcReviewTerm.textContent = FC.cards[FC.reviewIndex].definition;
+    fcReviewDef.textContent = FC.cards[FC.reviewIndex].term;
+    fcReviewDef.classList.remove('hidden');
+    fcReviewCard.style.background = '#dfe6e9';
+    fcReviewCard.style.fontSize = '1.2rem';
+  }
+  FC.reviewFlipped = !FC.reviewFlipped;
+});
+
+btnFcNext.addEventListener('click', () => {
+  if (FC.reviewIndex < FC.cards.length - 1) {
+    FC.reviewIndex++;
+    fcShowReviewCard();
+  }
+});
+
+btnFcPrev.addEventListener('click', () => {
+  if (FC.reviewIndex > 0) {
+    FC.reviewIndex--;
+    fcShowReviewCard();
+  }
+});
+
+// Init
+fcLoadSets();
 
 // ─── Keyboard shortcut: allow editing textarea ───────────────────────
 // The transcribed text is editable so users can fix errors before TTS

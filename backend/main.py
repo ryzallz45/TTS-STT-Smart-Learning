@@ -29,6 +29,7 @@ from backend.stt_engine import transcribe, get_stt_model
 from backend.tts_engine import generate_speech, get_tts_model
 from backend.quiz_engine import evaluate_pronunciation
 from backend.flashcard_engine import init_db as init_flashcard_db, create_set, list_sets, delete_set, create_card, list_cards, get_card, delete_card, update_card_audio
+from backend.vocab_engine import init_db as init_vocab_db, get_topics, get_topic_words, mark_learned, mark_unlearned, get_progress, update_word_audio
 STORAGE_DIR = BASE_DIR / "storage"
 VOICE_SAMPLES_DIR = STORAGE_DIR / "voice_samples"
 GENERATED_DIR = STORAGE_DIR / "generated"
@@ -65,6 +66,7 @@ async def lifespan(app: FastAPI):
         _models_loaded["tts_error"] = str(e)
         traceback.print_exc()
     init_flashcard_db(STORAGE_DIR)
+    init_vocab_db(STORAGE_DIR)
     print("=" * 50)
     yield
     print("[Shutdown] Server stopping.")
@@ -323,6 +325,80 @@ async def api_generate_card_audio(card_id: str, voice_sample: str = Form(...), l
     try:
         generate_speech(card["term"], str(voice_path), str(output_path), language=language)
         update_card_audio(card_id, output_filename)
+    except Exception as e:
+        if output_path.exists():
+            output_path.unlink()
+        traceback.print_exc()
+        raise HTTPException(500, f"Generate audio gagal: {str(e)}")
+
+    return {
+        "status": "ok",
+        "audio_url": f"/storage/generated/{output_filename}",
+        "filename": output_filename,
+    }
+
+
+# ─── Vocabulary Routes ──────────────────────────────────────────────
+
+
+@app.get("/api/vocab/topics")
+async def api_vocab_topics():
+    return {"status": "ok", "topics": get_topics()}
+
+
+@app.get("/api/vocab/words/{topic_id}")
+async def api_vocab_words(topic_id: str):
+    words = get_topic_words(topic_id)
+    return {"status": "ok", "words": words}
+
+
+@app.post("/api/vocab/learned")
+async def api_vocab_learned(topic_id: str = Form(...), word_id: str = Form(...), learned: bool = Form(True)):
+    if learned:
+        mark_learned(topic_id, word_id)
+    else:
+        mark_unlearned(topic_id, word_id)
+    return {"status": "ok"}
+
+
+@app.get("/api/vocab/progress")
+async def api_vocab_progress():
+    return {"status": "ok", "progress": get_progress()}
+
+
+@app.post("/api/vocab/words/{word_id}/generate-audio")
+async def api_vocab_generate_audio(word_id: str, topic_id: str = Form(...), voice_sample: str = Form(...), language: str = Form("en")):
+    words = get_topic_words(topic_id)
+    word = None
+    for w in words:
+        if w["id"] == word_id:
+            word = w
+            break
+    if not word:
+        raise HTTPException(404, "Kata tidak ditemukan")
+
+    voice_path = VOICE_SAMPLES_DIR / voice_sample
+    if not voice_path.exists():
+        raise HTTPException(404, "Voice sample tidak ditemukan")
+
+    if voice_path.suffix.lower() != ".wav":
+        wav_path = voice_path.with_suffix(".wav")
+        if not wav_path.exists():
+            ffmpeg = get_ffmpeg()
+            subprocess.run(
+                [ffmpeg, "-y", "-i", str(voice_path), "-ac", "1", "-ar", "22050", "-sample_fmt", "s16", str(wav_path)],
+                capture_output=True, check=True,
+            )
+        voice_path = wav_path
+
+    file_id = str(uuid.uuid4())
+    output_filename = f"vocab_{file_id}.wav"
+    output_path = GENERATED_DIR / output_filename
+
+    try:
+        tts_lang = language if language in ("en", "es", "fr", "de", "it", "pt", "pl", "tr", "ru", "nl", "cs", "ar", "zh-cn", "hu", "ko", "ja", "hi") else "en"
+        generate_speech(word["term"], str(voice_path), str(output_path), language=tts_lang)
+        update_word_audio(word_id, output_filename)
     except Exception as e:
         if output_path.exists():
             output_path.unlink()

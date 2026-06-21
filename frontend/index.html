@@ -117,6 +117,16 @@
     background: #fff; font-family: inherit; cursor: pointer;
   }
   .select-input:focus { outline: none; border-color: #6c5ce7; }
+  .vocab-word-card {
+    background: #f8f9fa; border-radius: 10px; padding: 16px; margin-bottom: 12px;
+    display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  }
+  .vocab-word-card .term { font-size: 1.1rem; font-weight: 700; color: #2d3436; }
+  .vocab-word-card .def { font-size: 0.9rem; color: #636e72; }
+  .vocab-word-card .example { font-size: 0.8rem; color: #b2bec3; font-style: italic; margin-top: 4px; }
+  .vocab-word-card .word-body { flex: 1; min-width: 150px; }
+  .vocab-word-card .word-actions { display: flex; gap: 6px; align-items: center; flex-wrap: nowrap; }
+  .vocab-check { width: 22px; height: 22px; cursor: pointer; accent-color: #00b894; }
   @media (max-width: 600px) {
     body { padding: 12px; }
     .card { padding: 16px; }
@@ -320,10 +330,40 @@
       </div>
     </div>
   </div>
-</div>
 
-<script>
-// ─── State ───────────────────────────────────────────────────────────
+  <!-- SECTION 6: KOSAKATA HARIAN -->
+  <div class="card">
+    <h2><span class="badge badge-quiz" style="background:#e17055">6</span> Kosakata Harian</h2>
+    <p style="font-size:0.88rem;color:#636e72;margin-bottom:12px">
+      Pelajari kosakata baru setiap hari dengan audio dari suara Anda.
+    </p>
+
+    <div id="vocab-progress-bar" style="margin-bottom:16px">
+      <div class="row" style="gap:12px;justify-content:space-between;margin-bottom:8px">
+        <select id="vocab-topic-select" class="select-input" style="flex:1;min-width:140px">
+          <option value="">-- Pilih Topik --</option>
+        </select>
+        <div id="vocab-streak" style="font-size:0.85rem;color:#e17055;font-weight:600;white-space:nowrap">🔥 0 hari</div>
+      </div>
+      <div id="vocab-topic-progress" style="display:none">
+        <div style="display:flex;justify-content:space-between;font-size:0.8rem;color:#636e72;margin-bottom:4px">
+          <span id="vocab-progress-label">0/0 dipelajari</span>
+          <span id="vocab-progress-pct">0%</span>
+        </div>
+        <div style="height:6px;background:#dfe6e9;border-radius:3px;overflow:hidden">
+          <div id="vocab-progress-fill" style="height:100%;width:0%;background:linear-gradient(90deg,#00b894,#00cec9);border-radius:3px;transition:width .5s"></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="vocab-words-area" class="hidden">
+      <div id="vocab-words-list"></div>
+      <div id="vocab-empty" class="status text-center hidden" style="padding:20px 0">Semua kata sudah dipelajari! 🎉</div>
+    </div>
+
+    <div id="vocab-status" class="status"></div>
+  </div>
+</div>
 const STATE = {
   sampleFilename: localStorage.getItem('activeVoiceSample') || null,
   sttAudioBlob: null,
@@ -1026,6 +1066,164 @@ btnFcPrev.addEventListener('click', () => {
 
 // Init
 fcLoadSets();
+
+// ─── Kosakata Harian ──────────────────────────────────────────────
+const VOCAB = {
+  currentTopicId: null,
+  words: [],
+};
+
+const vocabTopicSelect = $('#vocab-topic-select');
+const vocabStreak = $('#vocab-streak');
+const vocabTopicProgress = $('#vocab-topic-progress');
+const vocabProgressLabel = $('#vocab-progress-label');
+const vocabProgressPct = $('#vocab-progress-pct');
+const vocabProgressFill = $('#vocab-progress-fill');
+const vocabWordsArea = $('#vocab-words-area');
+const vocabWordsList = $('#vocab-words-list');
+const vocabEmpty = $('#vocab-empty');
+const vocabStatus = $('#vocab-status');
+
+async function vocabLoadTopics() {
+  try {
+    const d = await api('/api/vocab/topics');
+    const topics = d.topics;
+    vocabTopicSelect.innerHTML = '<option value="">-- Pilih Topik --</option>';
+    for (const t of topics) {
+      const opt = document.createElement('option');
+      opt.value = t.id;
+      opt.textContent = t.icon + ' ' + t.name + ' (' + t.learned_words + '/' + t.total_words + ')';
+      vocabTopicSelect.appendChild(opt);
+    }
+    await vocabLoadProgress();
+    if (VOCAB.currentTopicId) {
+      const exists = topics.some(t => t.id === VOCAB.currentTopicId);
+      if (exists) {
+        vocabTopicSelect.value = VOCAB.currentTopicId;
+        await vocabLoadWords();
+      } else {
+        VOCAB.currentTopicId = null;
+      }
+    }
+  } catch (e) {
+    showError(vocabStatus, 'Gagal memuat topik: ' + e.message);
+  }
+}
+
+async function vocabLoadProgress() {
+  try {
+    const d = await api('/api/vocab/progress');
+    const p = d.progress;
+    vocabStreak.textContent = '🔥 ' + p.streak + ' hari';
+    if (VOCAB.currentTopicId) {
+      const topics = await api('/api/vocab/topics');
+      const topic = topics.topics.find(t => t.id === VOCAB.currentTopicId);
+      if (topic) {
+        vocabProgressLabel.textContent = topic.learned_words + '/' + topic.total_words + ' dipelajari';
+        vocabProgressPct.textContent = topic.progress_pct + '%';
+        vocabProgressFill.style.width = topic.progress_pct + '%';
+        vocabTopicProgress.style.display = 'block';
+      }
+    }
+  } catch (e) {
+    console.error('Progress load error:', e);
+  }
+}
+
+async function vocabLoadWords() {
+  if (!VOCAB.currentTopicId) return;
+  try {
+    const d = await api('/api/vocab/words/' + VOCAB.currentTopicId);
+    VOCAB.words = d.words;
+    vocabRenderWords();
+    await vocabLoadProgress();
+  } catch (e) {
+    showError(vocabStatus, 'Gagal memuat kata: ' + e.message);
+  }
+}
+
+function vocabRenderWords() {
+  vocabWordsList.innerHTML = '';
+  const unlearned = VOCAB.words.filter(w => !w.learned);
+  if (VOCAB.words.length === 0 || unlearned.length === 0) {
+    vocabEmpty.classList.remove('hidden');
+    vocabEmpty.textContent = VOCAB.words.length === 0 ? 'Topik ini belum memiliki kata.' : '🎉 Semua kata sudah dipelajari!';
+    return;
+  }
+  vocabEmpty.classList.add('hidden');
+
+  for (const w of unlearned) {
+    const div = document.createElement('div');
+    div.className = 'vocab-word-card';
+    div.innerHTML = `
+      <div class="word-body">
+        <div class="term">${escapeHtml(w.term)}</div>
+        <div class="def">${escapeHtml(w.definition)}</div>
+        <div class="example">${escapeHtml(w.example)}</div>
+      </div>
+      <div class="word-actions">
+        <button class="btn btn-sm btn-warning vocab-gen-audio" data-word-id="${w.id}" data-topic-id="${VOCAB.currentTopicId}" data-term="${escapeAttr(w.term)}" data-lang="${w.language}">🔊</button>
+        <label style="display:flex;align-items:center;gap:4px;font-size:0.8rem;color:#636e72;cursor:pointer">
+          <input type="checkbox" class="vocab-check vocab-learned-chk" data-word-id="${w.id}"> Sudah
+        </label>
+      </div>
+    `;
+    vocabWordsList.appendChild(div);
+  }
+
+  vocabWordsList.querySelectorAll('.vocab-gen-audio').forEach(btn => {
+    btn.addEventListener('click', () => vocabGenerateAudio(btn.dataset.wordId, btn.dataset.topicId, btn.dataset.term, btn.dataset.lang));
+  });
+  vocabWordsList.querySelectorAll('.vocab-learned-chk').forEach(chk => {
+    chk.addEventListener('change', () => vocabToggleLearned(chk.dataset.wordId, chk.checked));
+  });
+}
+
+vocabTopicSelect.addEventListener('change', async () => {
+  VOCAB.currentTopicId = vocabTopicSelect.value || null;
+  if (VOCAB.currentTopicId) {
+    vocabWordsArea.classList.remove('hidden');
+    await vocabLoadWords();
+  } else {
+    vocabWordsArea.classList.add('hidden');
+    vocabTopicProgress.style.display = 'none';
+  }
+});
+
+async function vocabToggleLearned(wordId, learned) {
+  try {
+    const form = new URLSearchParams();
+    form.append('topic_id', VOCAB.currentTopicId);
+    form.append('word_id', wordId);
+    form.append('learned', learned);
+    await api('/api/vocab/learned', { method: 'POST', body: form });
+    await vocabLoadWords();
+    await vocabLoadTopics();
+  } catch (e) {
+    showError(vocabStatus, 'Gagal menyimpan progress: ' + e.message);
+  }
+}
+
+async function vocabGenerateAudio(wordId, topicId, term, lang) {
+  if (!STATE.sampleFilename) {
+    showError(vocabStatus, 'Voice sample belum tersedia. Rekam atau unggah sampel suara terlebih dahulu.');
+    return;
+  }
+  try {
+    const form = new URLSearchParams();
+    form.append('topic_id', topicId);
+    form.append('voice_sample', STATE.sampleFilename);
+    form.append('language', lang);
+    const d = await api('/api/vocab/words/' + wordId + '/generate-audio', { method: 'POST', body: form });
+    const audio = new Audio(d.audio_url);
+    audio.play().catch(() => {});
+    showSuccess(vocabStatus, '🔊 Memutar audio...');
+  } catch (e) {
+    showError(vocabStatus, 'Gagal generate audio: ' + e.message);
+  }
+}
+
+vocabLoadTopics();
 
 // ─── Keyboard shortcut: allow editing textarea ───────────────────────
 // The transcribed text is editable so users can fix errors before TTS

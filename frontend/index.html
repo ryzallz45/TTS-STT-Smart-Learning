@@ -5,18 +5,83 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Smart Learning - STT & TTS Voice Cloning</title>
 <style>
+  :root {
+    --bg: #f5f7fa;
+    --text: #1a1a2e;
+    --card-bg: #fff;
+    --card-shadow: rgba(0,0,0,0.08);
+    --header-text: #16213e;
+    --header-sub: #555;
+    --border: #dfe6e9;
+    --status-text: #636e72;
+    --sample-bg: #f8f9fa;
+    --stat-bg: #f8f9fa;
+    --stat-text: #2d3436;
+    --input-bg: #fff;
+    --quiz-circle-border: #dfe6e9;
+    --missing-bg: #dfe6e9;
+    --missing-text: #636e72;
+    --missing-border: #b2bec3;
+    --conv-chat-bg: #f8f9fa;
+    --conv-user-bg: #dfe6e9;
+    --conv-user-text: #2d3436;
+    --modal-bg: #fff;
+    --overlay: rgba(0,0,0,0.6);
+    --add-form-bg: #f8f9fa;
+    --example-text: #b2bec3;
+    --fc-card-bg: #f8f9fa;
+    --badge-quiz-bg: #fdcb6e;
+    --badge-quiz-text: #2d3436;
+  }
+  [data-theme="dark"] {
+    --bg: #0d1117;
+    --text: #e1e1e1;
+    --card-bg: #1e1e30;
+    --card-shadow: rgba(0,0,0,0.4);
+    --header-text: #a29bfe;
+    --header-sub: #a0a0b8;
+    --border: #3d3d5c;
+    --status-text: #a0a0b8;
+    --sample-bg: #2a2a40;
+    --stat-bg: #2a2a40;
+    --stat-text: #e1e1e1;
+    --input-bg: #1e1e30;
+    --quiz-circle-border: #3d3d5c;
+    --missing-bg: #2a2a40;
+    --missing-text: #a0a0b8;
+    --missing-border: #3d3d5c;
+    --conv-chat-bg: #1e1e30;
+    --conv-user-bg: #3d3d5c;
+    --conv-user-text: #e1e1e1;
+    --modal-bg: #1e1e30;
+    --overlay: rgba(0,0,0,0.85);
+    --add-form-bg: #2a2a40;
+    --example-text: #636e72;
+    --fc-card-bg: #2a2a40;
+    --badge-quiz-bg: #fdcb6e;
+    --badge-quiz-text: #2d3436;
+  }
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    background: #f5f7fa; color: #1a1a2e; line-height: 1.6; padding: 20px;
+    background: var(--bg); color: var(--text); line-height: 1.6; padding: 20px;
+    transition: background .3s, color .3s;
   }
   .container { max-width: 800px; margin: 0 auto; }
   header { text-align: center; padding: 30px 0 20px; }
-  header h1 { font-size: 1.6rem; color: #16213e; }
-  header p { color: #555; font-size: 0.9rem; margin-top: 4px; }
+  .header-row { display: flex; align-items: center; justify-content: center; gap: 12px; }
+  header h1 { font-size: 1.6rem; color: var(--header-text); }
+  header p { color: var(--header-sub); font-size: 0.9rem; margin-top: 4px; }
+  .btn-theme {
+    background: none; border: 2px solid var(--border); border-radius: 50%;
+    width: 38px; height: 38px; font-size: 1.1rem; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: .2s; color: var(--text);
+  }
+  .btn-theme:hover { border-color: #6c5ce7; }
   .card {
-    background: #fff; border-radius: 10px; padding: 24px; margin-bottom: 20px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    background: var(--card-bg); border-radius: 10px; padding: 24px; margin-bottom: 20px;
+    box-shadow: 0 2px 8px var(--card-shadow); transition: background .3s, box-shadow .3s;
   }
   .card h2 { font-size: 1.15rem; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
   .card h2 .badge {
@@ -45,24 +110,27 @@
   .btn-outline { background: transparent; border: 2px solid #6c5ce7; color: #6c5ce7; }
   .btn-outline:hover:not(:disabled) { background: #6c5ce7; color: #fff; }
   .btn-sm { padding: 6px 14px; font-size: 0.8rem; }
-  textarea {
-    width: 100%; min-height: 120px; padding: 12px; border: 2px solid #dfe6e9;
+  textarea, input[type="text"] {
+    width: 100%; min-height: 120px; padding: 12px; border: 2px solid var(--border);
     border-radius: 8px; font-size: 0.95rem; font-family: inherit;
     resize: vertical; margin: 12px 0; transition: .2s;
+    background: var(--input-bg); color: var(--text);
   }
-  textarea:focus { outline: none; border-color: #6c5ce7; }
+  input[type="text"] { min-height: auto; margin: 0 0 8px 0; }
+  textarea:focus, input[type="text"]:focus { outline: none; border-color: #6c5ce7; }
   audio { width: 100%; margin: 12px 0; }
-  .status { font-size: 0.85rem; color: #636e72; margin-top: 6px; }
+  .status { font-size: 0.85rem; color: var(--status-text); margin-top: 6px; }
   .status.error { color: #d63031; }
   .status.success { color: #00b894; }
   .file-input-wrapper { position: relative; overflow: hidden; }
   .file-input-wrapper input[type=file] {
     position: absolute; left: 0; top: 0; opacity: 0; width: 100%; height: 100%; cursor: pointer;
   }
-  .divider { height: 1px; background: #dfe6e9; margin: 16px 0; }
+  .divider { height: 1px; background: var(--border); margin: 16px 0; transition: background .3s; }
   .sample-info {
-    background: #f8f9fa; border-radius: 8px; padding: 12px 16px; margin-top: 12px;
+    background: var(--sample-bg); border-radius: 8px; padding: 12px 16px; margin-top: 12px;
     display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    transition: background .3s;
   }
   .sample-info audio { width: auto; min-width: 200px; margin: 0; flex: 1; }
   .sample-label { font-weight: 600; font-size: 0.85rem; color: #6c5ce7; }
@@ -80,10 +148,10 @@
     border-radius: 50%; animation: pulse 1s ease-in-out infinite; margin-right: 6px;
   }
   @keyframes pulse { 50% { opacity: 0.3; } }
-  .badge-quiz { background: #fdcb6e; color: #2d3436; }
+  .badge-quiz { background: var(--badge-quiz-bg); color: var(--badge-quiz-text); }
   .quiz-score-circle {
     width: 120px; height: 120px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
-    flex-direction: column; margin: 0 auto 16px; font-weight: 700; border: 6px solid #dfe6e9;
+    flex-direction: column; margin: 0 auto 16px; font-weight: 700; border: 6px solid var(--quiz-circle-border);
   }
   .quiz-score-circle .score-value { font-size: 2.2rem; line-height: 1; }
   .quiz-score-circle .score-label { font-size: 0.75rem; opacity: 0.8; }
@@ -102,38 +170,45 @@
   }
   .quiz-word.correct { background: #00b89420; color: #00b894; border: 1px solid #00b894; }
   .quiz-word.wrong { background: #d6303120; color: #d63031; border: 1px solid #d63031; text-decoration: line-through; }
-  .quiz-word.missing { background: #dfe6e9; color: #636e72; border: 1px dashed #b2bec3; }
+  .quiz-word.missing { background: var(--missing-bg); color: var(--missing-text); border: 1px dashed var(--missing-border); }
   .quiz-stats {
     display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 16px 0;
   }
   .quiz-stat {
-    background: #f8f9fa; border-radius: 8px; padding: 12px; text-align: center;
+    background: var(--stat-bg); border-radius: 8px; padding: 12px; text-align: center;
+    transition: background .3s;
   }
-  .quiz-stat .stat-value { font-size: 1.3rem; font-weight: 700; color: #2d3436; }
-  .quiz-stat .stat-label { font-size: 0.75rem; color: #636e72; margin-top: 2px; }
+  .quiz-stat .stat-value { font-size: 1.3rem; font-weight: 700; color: var(--stat-text); }
+  .quiz-stat .stat-label { font-size: 0.75rem; color: var(--status-text); margin-top: 2px; }
   .quiz-extra-words { text-align: center; margin-top: 8px; font-size: 0.85rem; color: #e17055; }
   .select-input {
-    padding: 8px 12px; border: 2px solid #dfe6e9; border-radius: 8px; font-size: 0.9rem;
-    background: #fff; font-family: inherit; cursor: pointer;
+    padding: 8px 12px; border: 2px solid var(--border); border-radius: 8px; font-size: 0.9rem;
+    background: var(--input-bg); color: var(--text); font-family: inherit; cursor: pointer;
+    transition: background .3s, color .3s, border-color .3s;
   }
   .select-input:focus { outline: none; border-color: #6c5ce7; }
   .vocab-word-card {
-    background: #f8f9fa; border-radius: 10px; padding: 16px; margin-bottom: 12px;
+    background: var(--fc-card-bg); border-radius: 10px; padding: 16px; margin-bottom: 12px;
     display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+    transition: background .3s;
   }
-  .vocab-word-card .term { font-size: 1.1rem; font-weight: 700; color: #2d3436; }
-  .vocab-word-card .def { font-size: 0.9rem; color: #636e72; }
-  .vocab-word-card .example { font-size: 0.8rem; color: #b2bec3; font-style: italic; margin-top: 4px; }
+  .vocab-word-card .term { font-size: 1.1rem; font-weight: 700; color: var(--text); }
+  .vocab-word-card .def { font-size: 0.9rem; color: var(--status-text); }
+  .vocab-word-card .example { font-size: 0.8rem; color: var(--example-text); font-style: italic; margin-top: 4px; }
   .vocab-word-card .word-body { flex: 1; min-width: 150px; }
   .vocab-word-card .word-actions { display: flex; gap: 6px; align-items: center; flex-wrap: nowrap; }
   .vocab-check { width: 22px; height: 22px; cursor: pointer; accent-color: #00b894; }
   .conv-bubble { max-width: 80%; padding: 10px 16px; border-radius: 16px; margin-bottom: 10px; font-size: 0.9rem; line-height: 1.4; position: relative; word-wrap: break-word; }
   .conv-bubble.ai { background: #6c5ce7; color: #fff; align-self: flex-start; border-bottom-left-radius: 4px; margin-right: auto; }
-  .conv-bubble.user { background: #dfe6e9; color: #2d3436; align-self: flex-end; border-bottom-right-radius: 4px; margin-left: auto; }
+  .conv-bubble.user { background: var(--conv-user-bg); color: var(--conv-user-text); align-self: flex-end; border-bottom-right-radius: 4px; margin-left: auto; }
   .conv-bubble .bubble-label { font-size: 0.65rem; opacity: 0.7; margin-bottom: 4px; font-weight: 600; }
   .conv-bubble .bubble-time { font-size: 0.6rem; opacity: 0.6; text-align: right; margin-top: 4px; }
   .conv-bubble.ai audio { width: 100%; margin-top: 6px; height: 32px; }
   #conv-chat-box { display: flex; flex-direction: column; }
+  #conv-add-form, #fc-add-form { background: var(--add-form-bg); transition: background .3s; }
+  #fc-review-modal > div { background: var(--modal-bg); transition: background .3s; }
+  #fc-review-term, #fc-review-def { color: var(--text); transition: color .3s; }
+  #fc-review-card { transition: background .3s; }
   @media (max-width: 600px) {
     body { padding: 12px; }
     .card { padding: 16px; }
@@ -146,7 +221,10 @@
 <body>
 <div class="container">
   <header>
-    <h1>Smart Learning</h1>
+    <div class="header-row">
+      <h1>Smart Learning</h1>
+      <button class="btn-theme" id="btn-theme" title="Toggle dark mode">🌙</button>
+    </div>
     <p>Sistem Pembelajaran Interaktif — Speech-to-Text &amp; Text-to-Speech dengan Voice Cloning</p>
   </header>
 
@@ -1501,6 +1579,20 @@ convLoadScenarios();
 
 // ─── Keyboard shortcut: allow editing textarea ───────────────────────
 // The transcribed text is editable so users can fix errors before TTS
+
+// ─── Dark Mode ──────────────────────────────────────────────────────
+const btnTheme = $('#btn-theme');
+const savedTheme = localStorage.getItem('theme') || 'light';
+document.documentElement.setAttribute('data-theme', savedTheme);
+btnTheme.textContent = savedTheme === 'dark' ? '☀️' : '🌙';
+
+btnTheme.addEventListener('click', () => {
+  const current = document.documentElement.getAttribute('data-theme');
+  const next = current === 'dark' ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', next);
+  localStorage.setItem('theme', next);
+  btnTheme.textContent = next === 'dark' ? '☀️' : '🌙';
+});
 
 // ─── Status bar ──────────────────────────────────────────────────────
 (async function checkStatus() {

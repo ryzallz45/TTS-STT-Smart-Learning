@@ -127,6 +127,13 @@
   .vocab-word-card .word-body { flex: 1; min-width: 150px; }
   .vocab-word-card .word-actions { display: flex; gap: 6px; align-items: center; flex-wrap: nowrap; }
   .vocab-check { width: 22px; height: 22px; cursor: pointer; accent-color: #00b894; }
+  .conv-bubble { max-width: 80%; padding: 10px 16px; border-radius: 16px; margin-bottom: 10px; font-size: 0.9rem; line-height: 1.4; position: relative; word-wrap: break-word; }
+  .conv-bubble.ai { background: #6c5ce7; color: #fff; align-self: flex-start; border-bottom-left-radius: 4px; margin-right: auto; }
+  .conv-bubble.user { background: #dfe6e9; color: #2d3436; align-self: flex-end; border-bottom-right-radius: 4px; margin-left: auto; }
+  .conv-bubble .bubble-label { font-size: 0.65rem; opacity: 0.7; margin-bottom: 4px; font-weight: 600; }
+  .conv-bubble .bubble-time { font-size: 0.6rem; opacity: 0.6; text-align: right; margin-top: 4px; }
+  .conv-bubble.ai audio { width: 100%; margin-top: 6px; height: 32px; }
+  #conv-chat-box { display: flex; flex-direction: column; }
   @media (max-width: 600px) {
     body { padding: 12px; }
     .card { padding: 16px; }
@@ -362,6 +369,43 @@
     </div>
 
     <div id="vocab-status" class="status"></div>
+  </div>
+
+  <!-- SECTION 7: MODE PERCAKAPAN -->
+  <div class="card">
+    <h2><span class="badge badge-tts" style="background:#6c5ce7">7</span> Mode Percakapan</h2>
+    <p style="font-size:0.88rem;color:#636e72;margin-bottom:12px">
+      Simulasi dialog interaktif dengan AI bersuara. Cocok untuk praktik berbicara.
+    </p>
+
+    <div id="conv-scenario-select" class="row" style="gap:8px;margin-bottom:12px">
+      <select id="conv-scenario" class="select-input" style="flex:1;min-width:150px">
+        <option value="">-- Pilih Skenario --</option>
+      </select>
+      <button class="btn btn-sm btn-primary" id="btn-conv-start" disabled>Mulai</button>
+    </div>
+
+    <div id="conv-chat-area" class="hidden">
+      <div id="conv-chat-box" style="background:#f8f9fa;border-radius:10px;padding:16px;max-height:400px;overflow-y:auto;margin-bottom:12px">
+      </div>
+
+      <div id="conv-user-turn-area" class="hidden">
+        <div id="conv-hint" style="font-size:0.85rem;color:#e17055;font-style:italic;margin-bottom:8px"></div>
+        <div class="row" style="gap:8px">
+          <button class="btn btn-sm btn-success" id="btn-conv-record">🎙️ Jawab</button>
+          <button class="btn btn-sm btn-danger" id="btn-conv-stop" disabled>⏹ Stop</button>
+          <button class="btn btn-sm btn-primary" id="btn-conv-send" disabled>
+            <span id="conv-send-text">Kirim</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="text-center mt-12">
+        <button class="btn btn-sm btn-outline" id="btn-conv-end" style="display:none">Selesaikan</button>
+      </div>
+    </div>
+
+    <div id="conv-status" class="status"></div>
   </div>
 </div>
 const STATE = {
@@ -1224,6 +1268,236 @@ async function vocabGenerateAudio(wordId, topicId, term, lang) {
 }
 
 vocabLoadTopics();
+
+// ─── Mode Percakapan ──────────────────────────────────────────────
+const CONV = {
+  scenarioId: null,
+  currentStep: 0,
+  totalTurns: 0,
+  userTurns: [],
+  audioBlob: null,
+  mediaRecorder: null,
+  chunks: [],
+  isRecording: false,
+};
+
+const convScenario = $('#conv-scenario');
+const btnConvStart = $('#btn-conv-start');
+const convChatArea = $('#conv-chat-area');
+const convChatBox = $('#conv-chat-box');
+const convUserTurnArea = $('#conv-user-turn-area');
+const convHint = $('#conv-hint');
+const btnConvRecord = $('#btn-conv-record');
+const btnConvStop = $('#btn-conv-stop');
+const btnConvSend = $('#btn-conv-send');
+const convSendText = $('#conv-send-text');
+const btnConvEnd = $('#btn-conv-end');
+const convStatus = $('#conv-status');
+
+async function convLoadScenarios() {
+  try {
+    const d = await api('/api/conversation/scenarios');
+    convScenario.innerHTML = '<option value="">-- Pilih Skenario --</option>';
+    for (const s of d.scenarios) {
+      const opt = document.createElement('option');
+      opt.value = s.id;
+      opt.textContent = s.icon + ' ' + s.title + ' (' + s.user_turns + ' percakapan)';
+      convScenario.appendChild(opt);
+    }
+  } catch (e) {
+    showError(convStatus, 'Gagal memuat skenario: ' + e.message);
+  }
+}
+
+convScenario.addEventListener('change', () => {
+  btnConvStart.disabled = !convScenario.value;
+});
+
+btnConvStart.addEventListener('click', async () => {
+  CONV.scenarioId = convScenario.value;
+  if (!CONV.scenarioId) return;
+  try {
+    const d = await api('/api/conversation/scenarios/' + CONV.scenarioId);
+    CONV.totalTurns = d.scenario.total_turns;
+    CONV.userTurns = d.scenario.user_turns;
+    CONV.currentStep = 0;
+    convChatBox.innerHTML = '';
+    convChatArea.classList.remove('hidden');
+    convUserTurnArea.classList.add('hidden');
+    btnConvEnd.style.display = 'none';
+    showSuccess(convStatus, 'Percakapan dimulai!');
+    convAdvanceStep();
+  } catch (e) {
+    showError(convStatus, 'Gagal memulai: ' + e.message);
+  }
+});
+
+async function convAdvanceStep() {
+  if (CONV.currentStep >= CONV.totalTurns) {
+    convAddBubble('ai', 'Percakapan selesai! Bagus sekali latihannya! 🎉');
+    convUserTurnArea.classList.add('hidden');
+    btnConvEnd.style.display = 'inline-flex';
+    return;
+  }
+
+  const isUserTurn = CONV.userTurns.includes(CONV.currentStep);
+  if (isUserTurn) {
+    convUserTurnArea.classList.remove('hidden');
+    btnConvRecord.disabled = false;
+    btnConvSend.disabled = true;
+    btnConvStop.disabled = true;
+    CONV.audioBlob = null;
+    const d = await api('/api/conversation/scenarios/' + CONV.scenarioId);
+    const stepIndex = CONV.userTurns.indexOf(CONV.currentStep);
+    if (d.scenario.user_turns) {
+      const response = await api('/api/conversation/scenarios/' + CONV.scenarioId);
+    }
+    const scenario = await api('/api/conversation/scenarios/' + CONV.scenarioId);
+    convHint.textContent = '💡 ' + getScenarioHint(CONV.scenarioId, CONV.currentStep);
+    setStatus(convStatus, 'Giliran Anda! Rekam jawaban Anda.');
+  } else {
+    convUserTurnArea.classList.add('hidden');
+    setStatus(convStatus, 'AI sedang berbicara...');
+    const s = await api('/api/conversation/scenarios/' + CONV.scenarioId);
+    if (!STATE.sampleFilename) {
+      convAddBubble('ai', '(aktifkan voice sample terlebih dahulu untuk mendengar suara)');
+    } else {
+      convGenerateAndPlayAiAudio(CONV.scenarioId, CONV.currentStep);
+    }
+  }
+}
+
+function getScenarioHint(scenarioId, step) {
+  const hints = {
+    'restaurant': {
+      1: 'Sapa pelayan dan minta meja untuk 2 orang',
+      3: 'Tanya menu rekomendasi hari ini',
+      5: 'Pesan nasi goreng spesial dan es teh',
+      7: 'Katakan tidak ada tambahan, ucapkan terima kasih',
+      9: 'Ucapkan terima kasih',
+    },
+    'introduction': {
+      1: 'Sebut nama Anda dan balas sapaan',
+      3: 'Sebutkan dari mana Anda berasal',
+      5: 'Ceritakan pekerjaan atau studi Anda',
+      7: 'Sebutkan hobi Anda',
+    },
+    'shopping': {
+      1: 'Tanya apakah mereka menjual baju',
+      3: 'Sebut ukuran dan warna yang diinginkan',
+      5: 'Tanya harga baju tersebut',
+      7: 'Katakan Anda akan membelinya',
+    },
+    'hotel': {
+      1: 'Katakan ya, ada reservasi atas nama Anda',
+      3: 'Konfirmasi dan tanya tentang sarapan',
+      5: 'Tanya password Wi-Fi',
+      7: 'Ucapkan terima kasih dan tanya jam check-out',
+    },
+  };
+  return hints[scenarioId]?.[step] || 'Rekam jawaban Anda';
+}
+
+async function convGenerateAndPlayAiAudio(scenarioId, step) {
+  try {
+    const form = new URLSearchParams();
+    form.append('scenario_id', scenarioId);
+    form.append('step', step);
+    form.append('voice_sample', STATE.sampleFilename);
+    const d = await api('/api/conversation/generate-ai-audio', { method: 'POST', body: form });
+    convAddBubble('ai', d.text, d.audio_url);
+    CONV.currentStep = d.next_step;
+    setTimeout(() => convAdvanceStep(), 1000);
+  } catch (e) {
+    convAddBubble('ai', '(gagal generate audio: ' + e.message + ')');
+    CONV.currentStep++;
+    setTimeout(() => convAdvanceStep(), 500);
+  }
+}
+
+function convAddBubble(speaker, text, audioUrl) {
+  const div = document.createElement('div');
+  div.className = 'conv-bubble ' + speaker;
+  const label = speaker === 'ai' ? 'AI' : 'Anda';
+  const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  let html = `<div class="bubble-label">${label}</div><div>${escapeHtml(text)}</div>`;
+  if (audioUrl) {
+    html += `<audio controls src="${audioUrl}"></audio>`;
+  }
+  html += `<div class="bubble-time">${time}</div>`;
+  div.innerHTML = html;
+  convChatBox.appendChild(div);
+  convChatBox.scrollTop = convChatBox.scrollHeight;
+}
+
+btnConvRecord.addEventListener('click', async () => {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    CONV.mediaRecorder = new MediaRecorder(stream, {
+      mimeType: MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : 'audio/webm'
+    });
+    CONV.chunks = [];
+    CONV.mediaRecorder.ondataavailable = e => { if (e.data.size > 0) CONV.chunks.push(e.data); };
+    CONV.mediaRecorder.onstop = () => {
+      stream.getTracks().forEach(t => t.stop());
+      CONV.audioBlob = new Blob(CONV.chunks, { type: CONV.mediaRecorder.mimeType });
+      btnConvSend.disabled = false;
+      setStatus(convStatus, 'Rekaman siap. Klik Kirim.', 'success');
+    };
+    CONV.mediaRecorder.start();
+    CONV.isRecording = true;
+    btnConvRecord.disabled = true;
+    btnConvStop.disabled = false;
+    btnConvSend.disabled = true;
+    setStatus(convStatus, 'Merekam...');
+  } catch (e) {
+    showError(convStatus, 'Akses mikrofon ditolak: ' + e.message);
+  }
+});
+
+btnConvStop.addEventListener('click', () => {
+  if (CONV.mediaRecorder && CONV.isRecording) {
+    CONV.mediaRecorder.stop();
+    CONV.isRecording = false;
+    btnConvRecord.disabled = false;
+    btnConvStop.disabled = true;
+  }
+});
+
+btnConvSend.addEventListener('click', async () => {
+  if (!CONV.audioBlob) return;
+  setLoading(btnConvSend, convSendText, 'Mengirim', true);
+  btnConvRecord.disabled = true;
+  btnConvStop.disabled = true;
+  setStatus(convStatus, 'Memproses jawaban...');
+
+  try {
+    const form = new FormData();
+    form.append('file', CONV.audioBlob, `conv_${Date.now()}.webm`);
+    form.append('language', 'id');
+    const d = await api('/api/stt/transcribe', { method: 'POST', body: form });
+    convAddBubble('user', d.text || '(tidak terdeteksi)');
+    CONV.currentStep++;
+    convUserTurnArea.classList.add('hidden');
+    setTimeout(() => convAdvanceStep(), 500);
+  } catch (e) {
+    showError(convStatus, 'Gagal memproses: ' + e.message);
+  } finally {
+    setLoading(btnConvSend, convSendText, 'Kirim', false);
+    btnConvRecord.disabled = false;
+  }
+});
+
+btnConvEnd.addEventListener('click', () => {
+  CONV.scenarioId = null;
+  CONV.currentStep = 0;
+  convChatArea.classList.add('hidden');
+  convScenario.value = '';
+  btnConvStart.disabled = true;
+  setStatus(convStatus, 'Percakapan selesai. Coba skenario lain!', 'success');
+});
+
+convLoadScenarios();
 
 // ─── Keyboard shortcut: allow editing textarea ───────────────────────
 // The transcribed text is editable so users can fix errors before TTS

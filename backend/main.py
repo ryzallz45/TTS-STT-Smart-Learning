@@ -30,6 +30,7 @@ from backend.tts_engine import generate_speech, get_tts_model
 from backend.quiz_engine import evaluate_pronunciation
 from backend.flashcard_engine import init_db as init_flashcard_db, create_set, list_sets, delete_set, create_card, list_cards, get_card, delete_card, update_card_audio
 from backend.vocab_engine import init_db as init_vocab_db, get_topics, get_topic_words, mark_learned, mark_unlearned, get_progress, update_word_audio
+from backend.conversation_engine import list_scenarios, get_scenario, get_dialogue_at
 STORAGE_DIR = BASE_DIR / "storage"
 VOICE_SAMPLES_DIR = STORAGE_DIR / "voice_samples"
 GENERATED_DIR = STORAGE_DIR / "generated"
@@ -409,6 +410,78 @@ async def api_vocab_generate_audio(word_id: str, topic_id: str = Form(...), voic
         "status": "ok",
         "audio_url": f"/storage/generated/{output_filename}",
         "filename": output_filename,
+    }
+
+# ─── Conversation Routes ───────────────────────────────────────────
+
+
+@app.get("/api/conversation/scenarios")
+async def api_conv_scenarios():
+    return {"status": "ok", "scenarios": list_scenarios()}
+
+
+@app.get("/api/conversation/scenarios/{scenario_id}")
+async def api_conv_scenario(scenario_id: str):
+    scenario = get_scenario(scenario_id)
+    if not scenario:
+        raise HTTPException(404, "Skenario tidak ditemukan")
+    user_turns = [i for i, d in enumerate(scenario["dialogue"]) if d["speaker"] == "user"]
+    return {
+        "status": "ok",
+        "scenario": {
+            "id": scenario["id"],
+            "title": scenario["title"],
+            "icon": scenario["icon"],
+            "description": scenario["description"],
+            "language": scenario["language"],
+            "user_turns": user_turns,
+            "total_turns": len(scenario["dialogue"]),
+        },
+    }
+
+
+@app.post("/api/conversation/generate-ai-audio")
+async def api_conv_generate_audio(scenario_id: str = Form(...), step: int = Form(...), voice_sample: str = Form(...)):
+    dialogue = get_dialogue_at(scenario_id, step)
+    if not dialogue:
+        raise HTTPException(404, "Percakapan tidak ditemukan pada langkah ini")
+    if dialogue["speaker"] != "ai":
+        raise HTTPException(400, "Langkah ini bukan AI speech")
+
+    scenario = get_scenario(scenario_id)
+    voice_path = VOICE_SAMPLES_DIR / voice_sample
+    if not voice_path.exists():
+        raise HTTPException(404, "Voice sample tidak ditemukan")
+
+    if voice_path.suffix.lower() != ".wav":
+        wav_path = voice_path.with_suffix(".wav")
+        if not wav_path.exists():
+            ffmpeg = get_ffmpeg()
+            subprocess.run(
+                [ffmpeg, "-y", "-i", str(voice_path), "-ac", "1", "-ar", "22050", "-sample_fmt", "s16", str(wav_path)],
+                capture_output=True, check=True,
+            )
+        voice_path = wav_path
+
+    file_id = str(uuid.uuid4())
+    output_filename = f"conv_{file_id}.wav"
+    output_path = GENERATED_DIR / output_filename
+
+    try:
+        tts_lang = scenario["language"] if scenario["language"] in ("en", "es", "fr", "de", "it", "pt", "pl", "tr", "ru", "nl", "cs", "ar", "zh-cn", "hu", "ko", "ja", "hi") else "en"
+        generate_speech(dialogue["text"], str(voice_path), str(output_path), language=tts_lang)
+    except Exception as e:
+        if output_path.exists():
+            output_path.unlink()
+        traceback.print_exc()
+        raise HTTPException(500, f"Generate audio gagal: {str(e)}")
+
+    return {
+        "status": "ok",
+        "audio_url": f"/storage/generated/{output_filename}",
+        "filename": output_filename,
+        "text": dialogue["text"],
+        "next_step": step + 1,
     }
 
 
